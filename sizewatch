@@ -1,0 +1,115 @@
+#! /usr/bin/python
+
+"watch file(s) grow in size"
+
+import os
+import stat
+import subprocess
+import sys
+import time
+import argparse
+
+def timeout_arg(string):
+    "handle argument for -t: float >= 0.0"
+    value = float(string)
+    if value < 0:
+        raise argparse.ArgumentTypeError('timeout must be at least 0.0')
+    return value
+
+def main():
+    "parse arguments"
+
+    parser = argparse.ArgumentParser(description = 'watch file sizes')
+
+    # If we use argparse.FileType('r') here, we have poor
+    # control over open failures, so ... don't.
+    parser.add_argument('files', metavar = 'FILES',
+        nargs = '+',
+        #type = argparse.FileType('r'),
+        help = 'files to watch')
+    parser.add_argument('-t', '--timeout', type = timeout_arg, default = 1)
+    args = parser.parse_args()
+    fdlist = []
+    for name in args.files:
+        try:
+            fdlist.append(os.open(name, os.O_RDONLY))
+        except OSError, err:
+            print >> sys.stderr, '%s: %s' % (name, err.strerror)
+    if len(fdlist) < len(args.files):
+        sys.exit(1)
+
+    watch(args.files, fdlist, args.timeout)
+
+def totalsize(name, statresult):
+    """
+    Produce the size of a file or directory.
+    If the argument is a directory, the size is the
+    result of "du -b <name>" (or equivalent), NOT
+    the size of the directory itself.
+    """
+    if stat.S_ISDIR(statresult.st_mode):
+        cmd = subprocess.Popen(['du', '-b', '-s', name], shell = False,
+            close_fds = True,
+            stdout = subprocess.PIPE)
+        stdout = cmd.communicate()[0]
+        cmd.wait()
+        return int(stdout.split()[0])
+    return statresult.st_size
+
+def watch(names, fdlist, timeout):
+    "watch the listed files"
+    statlist = []
+    sizes = []
+    for fdesc in fdlist:
+        statlist.append(os.fstat(fdesc))
+    namesize = max(len(name) for name in names)
+    for (i, name) in enumerate(names):
+        size = totalsize(name, statlist[i])
+        print '%*s  %s' % (namesize, name, size_string(size))
+        sizes.append(size)
+    try:
+        while True:
+            time.sleep(timeout)
+            sys.stdout.write('\033[A' * len(names))
+            for (i, name) in enumerate(names):
+                statresult = os.fstat(fdlist[i])
+                newsize = totalsize(name, statresult)
+                print '%*s  %s %s' % (namesize, name, size_string(newsize),
+                    delta_rate(sizes[i], newsize, timeout))
+                statlist[i] = statresult
+                sizes[i] = newsize
+    except KeyboardInterrupt:
+        # normal exit
+	print
+        return
+
+def size_string(size):
+    """return "human-readable" size string, always has leading blank"""
+    if size <= 1024:
+        return '%9d' % size
+    val = float(size)
+    for suffix in 'kMGT':
+        val /= 1024.0
+        if val <= 1024:
+            return '%8.3f%c' % (val, suffix)
+    raise ValueError("can't represent %s" % (size,))
+
+def delta_rate(old, new, timeout):
+    "estimate bytes/s (or similar)"
+    if timeout < 0.1:
+        return '' # not really representable, so we do not even try
+    delta = new - old
+    if delta < 0:
+        prefix = '-'
+        delta = -delta
+    else:
+        prefix = ' '
+    ss = size_string(delta / timeout).split('.')
+    if len(ss) == 1:
+	# it's all in decimal, drop 5 chars from the front
+	ss[0] = ss[0][5:]
+        ss.append(' ')
+    return prefix + ss[0] + ss[1][-1] + 'B/s'
+
+if __name__ == '__main__':
+    main()
