@@ -52,7 +52,9 @@ def totalsize(name, statresult):
             close_fds = True,
             stdout = subprocess.PIPE)
         stdout = cmd.communicate()[0]
-        cmd.wait()
+        result = cmd.wait()
+        if result != 0:
+            sys.exit('du failed, cannot continue')
         return int(stdout.split()[0])
     return statresult.st_size
 
