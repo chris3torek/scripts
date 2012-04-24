@@ -44,18 +44,15 @@ def totalsize(name, statresult):
     """
     Produce the size of a file or directory.
     If the argument is a directory, the size is the
-    result of "du -b <name>" (or equivalent), NOT
+    result of sizing all the files in it, NOT
     the size of the directory itself.
     """
     if stat.S_ISDIR(statresult.st_mode):
-        cmd = subprocess.Popen(['du', '-b', '-s', name], shell = False,
-            close_fds = True,
-            stdout = subprocess.PIPE)
-        stdout = cmd.communicate()[0]
-        result = cmd.wait()
-        if result != 0:
-            sys.exit('du failed, cannot continue')
-        return int(stdout.split()[0])
+        size = 0
+        for fname in os.listdir(name):
+            path = os.path.join(name, fname)
+            size += totalsize(path, os.stat(path))
+        return size
     return statresult.st_size
 
 def watch(names, fdlist, timeout):
