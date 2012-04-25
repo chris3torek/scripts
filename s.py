@@ -14,6 +14,8 @@ import subprocess
 import sys
 
 # Global variables.
+# ?? probably should just use the name of the program, and let
+# os.Popen search $PATH for it
 default_pager = '/usr/bin/more'
 lynx_path = '/usr/local/bin/lynx'
 mhpath_path = '/usr/local/bin/mhpath'
@@ -29,26 +31,23 @@ def extract_mh_files(arguments):
 	arguments = ['.']
 
     # Run mhpath to retrive the pathnames of the messages.
-    mhpath_args = [mhpath_path]
-    mhpath_args.extend(arguments)
+    mhpath_args = [mhpath_path] + arguments
     mhpath_command = subprocess.Popen(
       mhpath_args,
-      stdout = subprocess.PIPE,
-      stderr = subprocess.PIPE)
-    so, se = mhpath_command.communicate()
-    if se:
-	sys.stderr.write(se)
+      stdout = subprocess.PIPE)
+    so, _ = mhpath_command.communicate()
     message_paths = so.split()
 
+    nullfd = os.open(os.devnull, os.O_WRONLY)
     # Run the MH show command and discard the output (!).
     # We need to produce the side effects from running show.
-    show_args = [show_path, '-noshowproc']
-    show_args.extend(arguments)
+    show_args = [show_path, '-noshowproc'] + arguments
     show_command = subprocess.Popen(
       show_args,
-      stdout = subprocess.PIPE,
-      stderr = subprocess.PIPE)
-    so, se = show_command.communicate()
+      stdout = nullfd,
+      stderr = nullfd)
+    show_command.wait()
+    os.close(nullfd)
 
     return message_paths
 
@@ -217,6 +216,7 @@ def main():
 	      stdin = subprocess.PIPE)
 	    try:
 		pager_command.communicate(s)
+                pager_command.wait()
 	    except IOError as err:
 		pass
 	else:
