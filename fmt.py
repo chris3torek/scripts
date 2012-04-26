@@ -2,7 +2,7 @@
 
 '''A replacement for the fmt utility.'''
 
-import optparse
+import argparse
 import re
 import sys
 import textwrap
@@ -162,14 +162,14 @@ class line_data(object):
        any initial prefix containing ">" characters (an e-mail
        blockquoting convention).'''
 
-    def __init__(self, s):
+    def __init__(self, s, utf8):
         try:
             s = s.decode('utf_8')
         except UnicodeError:
             s = s.decode('iso-8859-1')
         s = s.rstrip()
         s = s.expandtabs()
-	if not options.utf8:
+	if not utf8:
 	    s = s.translate(CONVERSIONS)
 	    s = s.encode('ascii', 'xmlcharrefreplace')
         m = PREFIX_RE.match(s)
@@ -186,39 +186,54 @@ def main():
        are converted to safe ASCII equivalents.  E-mail blockquotes
        are reflowed, preserving any prefix.'''
 
-    global options
-
-    p = optparse.OptionParser(usage = 'Usage: %prog [options] [files ...]',
+    p = argparse.ArgumentParser(
       description = 'Format text from standard input or files, converting '
         'UTF-8 characters into semi-equivalent ASCII where possible, '
         'and preserving decorations and indentation (but expanding tabs).')
 
-    p.add_option('--utf8', '-u', action = 'store_true',
+    p.add_argument('--utf8', '-u', action = 'store_true',
       help = 'preserve UTF-8 character encodings in the input')
-    p.add_option('--width', '-w', type = 'int', default = 72,
+    p.add_argument('--width', '-w', type = int, default = 72,
       help = 'limit the length of filled lines to the given value '
       '(default 72)')
+    p.add_argument('files', metavar = 'FILE', nargs = '*')
 
     result = 0
 
-    options, files = p.parse_args()
+    args = p.parse_args()
 
     input_lines = []
 
-    if files:
-        for filename in files:
+    # Semi-compatibility with system "fmt": first two "files", if
+    # they are all numeric, are goal and max-width.  (We don't
+    # have separate goal and maxwidth, just a max-width.)  If
+    # the first file "file" is a negative number, it's a max-width.
+    #
+    # Note: with the system fmt, "fmt -w 10 -40" uses a width of 10;
+    # this uses 40 instead.
+    if args.files:
+        if args.files[0].isdigit():
+            maxwidth = None
+            goal = int(args.files.pop(0))
+            if args.files and args.files[0].isdigit():
+                maxwidth = int(args.files.pop(0))
+            args.width = maxwidth or goal
+        elif args.files[0][0] == '-' and args.files[0][1:].isdigit():
+            args.width = -int(args.files.pop(0))
+
+    if args.files:
+        for filename in args.files:
             try:
-                f = open(filename, 'r')
+                with open(filename, 'r') as f:
+                    for s in f:
+                        input_lines.append(line_data(s, args.utf8))
             except IOError as err:
                 print >> sys.stderr, str(err)
                 result = 1
                 continue
-
-            for s in f:
-                input_lines.append(line_data(s))
     else:
         for s in sys.stdin:
-            input_lines.append(line_data(s))
+            input_lines.append(line_data(s, args.utf8))
 
     merged_lines = []
 
@@ -231,7 +246,7 @@ def main():
         merged_lines.append(line)
 
     wrapper = textwrap.TextWrapper()
-    wrapper.width = options.width
+    wrapper.width = args.width
     wrapper.fix_sentence_endings = True
     # wrapper.drop_whitespace = False
 
@@ -243,7 +258,7 @@ def main():
 	    s = wrapper.fill(line.text)
 	else:
 	    s = line.prefix.rstrip()
-	if options.utf8:
+	if args.utf8:
 	    s = s.encode('utf_8')
 	print s
 
