@@ -51,7 +51,7 @@ def totalsize(name, statresult):
         size = 0
         for fname in os.listdir(name):
             path = os.path.join(name, fname)
-            size += totalsize(path, os.stat(path))
+            size += totalsize(path, os.lstat(path))
         return size
     return statresult.st_size
 
