@@ -3,6 +3,8 @@
 '''A replacement for the fmt utility.'''
 
 import argparse
+import errno
+import os
 import re
 import sys
 import textwrap
@@ -193,9 +195,9 @@ def main():
 
     p.add_argument('--utf8', '-u', action = 'store_true',
       help = 'preserve UTF-8 character encodings in the input')
-    p.add_argument('--width', '-w', type = int, default = 72,
+    p.add_argument('--width', '-w', type = int,
       help = 'limit the length of filled lines to the given value '
-      '(default 72)')
+      '(default 72 or from ~/.fmtrc)')
     p.add_argument('files', metavar = 'FILE', nargs = '*')
 
     result = 0
@@ -220,6 +222,9 @@ def main():
             args.width = maxwidth or goal
         elif args.files[0][0] == '-' and args.files[0][1:].isdigit():
             args.width = -int(args.files.pop(0))
+
+    if args.width is None:
+        args.width = read_rc_file('~/.fmtrc', {'width': 72})['width']
 
     if args.files:
         for filename in args.files:
@@ -263,6 +268,74 @@ def main():
 	print s
 
     return result
+
+def read_rc_file(path, values):
+    """Read ~/.rc-file <path> of the form:
+          var\s*=\s*value
+       The types of the values are determined by the types of the
+       input dictionary <values>.  The return value is the input
+       dictionary, with <values> values modified per the rc file.
+       """
+
+    try:
+        with open(os.path.expanduser(path), 'r') as stream:
+            return _parse_rc_stream(stream, values)
+    except (OSError, IOError) as err:
+        if err.errno != errno.ENOENT:
+           print >> sys.stderr, str(err)
+        return values
+
+def _update_int(values, name, newval):
+    "Helper for _parse_rc_stream: update an int value"
+    values[name] = int(newval)
+
+def _update_str(values, name, newval):
+    "Helper for _parse_rc_stream: update a string value"
+    # if newval is surrounded by quotes, strip them off and
+    # parse escapes.
+    if len(newval) >= 2 and newval[0] in "'\"" and newval[-1] == newval[0]:
+        newval = newval[1:-1].decode('string_escape')
+    values[name] = newval
+
+def _update_bool(values, name, newval):
+    "Helper for _parse_rc_stream: update a boolean value"
+    try:
+        values[name] = {
+            'true': True,
+            'false': False,
+            '0': False,
+            '1': True,
+        }[newval.tolower()]
+    except KeyError:
+        raise ValueError('not a valid boolean')
+
+def _parse_rc_stream(stream, values):
+    "Helper for read_rc_file (q.v.)"
+    parts_re = re.compile(r'(\w+)\s*=\s*(.*)')
+    updater = {
+        int: _update_int,
+        str: _update_str,
+        bool: _update_bool,
+    }
+    for lno, line in enumerate(stream, 1):
+        parts = parts_re.match(line.strip())
+        if not parts:
+            print >> sys.stderr, \
+                "%s:%d: can't parse line; ignored" % (stream.name, lno)
+            continue
+        name = parts.group(1)
+        newval = parts.group(2)
+        if name in values:
+            try:
+                updater[type(values[name])](values, name, newval)
+            except ValueError as err:
+                print >> sys.stderr, \
+                    "%s:%d: can't set %s = %s (%s); ignored" % \
+                    (stream.name, lno, name, newval, str(err))
+        else:
+            print >> sys.stderr, \
+                '%s:%d: "%s" unknown; ignored' % (stream.name, lno, name)
+    return values
 
 if __name__ == '__main__':
     try:
