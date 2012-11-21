@@ -67,7 +67,7 @@ def sanitize_substrings(substring_pairs):
 		codec_name = 'ascii'
 	    try:
 		u = substring.decode(codec_name, 'strict')
-	    except UnicodeError as err:
+	    except (UnicodeError, LookupError):
 		u = substring.decode('iso-8859-1')
 	    s = u.encode('utf-8', 'ignore')
 	out.append(s)
