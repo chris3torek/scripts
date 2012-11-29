@@ -4,11 +4,11 @@
 # Read e-mail messages from an MH mail directory in my preferred style.
 #
 
+import argparse
 import email.charset
 import email.header
 import email.message
 import email.parser
-import optparse
 import os
 import subprocess
 import sys
@@ -175,21 +175,23 @@ def format_parts(buffer, parts):
     buffer.append('\n')
 
 def main():
-    p = optparse.OptionParser(usage = 'Usage: %prog [options] [messages ...]',
+    p = argparse.ArgumentParser(
       description = 'Print the given MH messages from the current folder '
 	'using MIME headers to pick the best text representation.')
-    p.add_option('--html', '-H', action = 'store_true',
+    p.add_argument('-H', '--html', action = 'store_true',
       help = 'Score HTML higher than plain text.  Useful when a message '
 	'with alternative parts contains different information in the plain '
 	'text and html alternatives.')
+    p.add_argument('arguments', metavar = 'msg', nargs = '*',
+        help = 'messages to show')
 
-    options, arguments = p.parse_args()
+    args = p.parse_args()
 
-    if options.html:
+    if args.html:
 	score_type['text/html'] = 10
 
     status = 0
-    files = extract_mh_files(arguments)
+    files = extract_mh_files(args.arguments)
 
     buffer = []
     for filename in files:
