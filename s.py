@@ -12,6 +12,7 @@ import email.parser
 import os
 import subprocess
 import sys
+import tempfile
 
 # Global variables.
 # ?? probably should just use the name of the program, and let
@@ -90,6 +91,10 @@ def displayable(tree):
 
     return tree.get_content_type() in displayable_types
 
+def is_image(tree):
+    '''Return Tue if this MIME part represents an image.'''
+    return tree.get_content_type().startswith('image/')
+
 score_type = {
   'text/plain': 9,
   'message/rfc822': 8,
@@ -105,7 +110,7 @@ def get_score(part):
     part_type = part.get_content_type()
     return score_type.get(part_type, 1)
 
-def select_parts(tree, parts):
+def select_parts(tree, parts, images):
     '''Given a tree of email MIME messages (Message objects), choose
        the parts that we're interested in and append them to
        the 'parts' list.'''
@@ -113,6 +118,8 @@ def select_parts(tree, parts):
     if not tree.is_multipart():
 	if displayable(tree):
 	    parts.append(tree)
+        if images and is_image(tree):
+            parts.append(tree)
 	return
 
     # Loop over alternatives and choose the best one.
@@ -125,12 +132,12 @@ def select_parts(tree, parts):
 		best_score = score
 		best_part = part
 	if best_part:
-	    select_parts(best_part, parts)
+	    select_parts(best_part, parts, images)
 	return
 
     # Loop over multiple parts.
     for part in tree.get_payload():
-	select_parts(part, parts)
+	select_parts(part, parts, images)
 
 interesting_headers = set((
   'cc',
@@ -143,6 +150,8 @@ interesting_headers = set((
 def format_headers(buffer, tree):
     '''Queue the headers that we're interested in from this tree.'''
 
+    if is_image(tree):
+        return
     for header, value in tree.items():
 	if header.lower() in interesting_headers:
 	    substring_pairs = email.header.decode_header(value)
@@ -157,7 +166,9 @@ def format_parts(buffer, parts):
 	part_type = part.get_content_type()
 	part_charset = part.get_content_charset()
 	part_payload = part.get_payload(decode = True)
-	if part_type == 'text/html':
+        if is_image(part):
+            display_image(part_payload)
+	elif part_type == 'text/html':
 	    lynx_command = subprocess.Popen(
 	      [lynx_path, '-stdin', '-dump', '-force_html',
 		'-hiddenlinks=ignore', '-nolist', '-width=80'],
@@ -174,6 +185,33 @@ def format_parts(buffer, parts):
 	    buffer.append(sanitize(part_payload, part_charset))
     buffer.append('\n')
 
+def display_image(bits):
+    '''Display image.  We use xv, so you'll have to have that installed.'''
+
+    # If there's something pending, push it out now so that we don't
+    # duplicate it in our subprocess.
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    # Fire up a pre-backgrounded (as it were) xv.
+    try:
+        pid = os.fork()
+    except OSError as err:
+        print >> sys.stderr, str(err)
+        return
+    if pid:
+        return
+
+    # Child: run xv.  When it finishes, exit immediately so
+    # that we don't go on and display more image parts.
+    tmp = tempfile.NamedTemporaryFile()
+    tmp.write(bits)
+    tmp.flush()
+    status = subprocess.call(['xv', tmp.name])
+    if status:
+        print >> sys.stderr, 'xv exited with status', status
+    os._exit(1)
+
 def main():
     p = argparse.ArgumentParser(
       description = 'Print the given MH messages from the current folder '
@@ -182,6 +220,9 @@ def main():
       help = 'Score HTML higher than plain text.  Useful when a message '
 	'with alternative parts contains different information in the plain '
 	'text and html alternatives.')
+    p.add_argument('-n', '--no-images',
+      action = 'store_false', dest = 'images',
+      help = 'suppress display of multipart pieces of type image/*')
     p.add_argument('arguments', metavar = 'msg', nargs = '*',
         help = 'messages to show')
 
@@ -199,7 +240,7 @@ def main():
 	    with open(filename, 'r') as f:
 		tree = email.message_from_file(f)
 		parts = []
-		select_parts(tree, parts)
+		select_parts(tree, parts, args.images)
 		format_headers(buffer, tree)
 		format_parts(buffer, parts)
 	except email.errors.MessageError as err:
