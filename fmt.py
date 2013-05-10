@@ -9,7 +9,7 @@ import re
 import sys
 import textwrap
 
-PREFIX_RE = re.compile(r'''[ >]+| *\* +|# +''')
+PREFIX_RE = re.compile(r''' *\* +|[ >]+|# +''')
 
 CONVERSIONS = {
   ord(u'\N{no-break space}') : u' ',
