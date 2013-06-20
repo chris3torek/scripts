@@ -21,6 +21,7 @@ default_pager = '/usr/bin/more'
 lynx_path = '/usr/local/bin/lynx'
 mhpath_path = '/usr/local/bin/mhpath'
 show_path = '/usr/local/bin/show'
+default_images = False
 
 def extract_mh_files(arguments):
     '''Run MH commands to parse the argument string and return a list
@@ -220,16 +221,23 @@ def main():
       help = 'Score HTML higher than plain text.  Useful when a message '
 	'with alternative parts contains different information in the plain '
 	'text and html alternatives.')
+    p.add_argument('-i', '--images',
+      action = 'store_true', dest = 'images',
+      help = 'display multipart pieces of type image/*')
     p.add_argument('-n', '--no-images',
-      action = 'store_false', dest = 'images',
+      action = 'store_true', dest = 'noimages',
       help = 'suppress display of multipart pieces of type image/*')
     p.add_argument('arguments', metavar = 'msg', nargs = '*',
         help = 'messages to show')
 
     args = p.parse_args()
+    if args.images and args.noimages:
+        p.error('specify at most one of -i (images) or -n (no images)')
 
     if args.html:
 	score_type['text/html'] = 10
+    if not args.images and not args.noimages:
+        args.images = default_images
 
     status = 0
     files = extract_mh_files(args.arguments)
