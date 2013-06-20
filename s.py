@@ -1,4 +1,4 @@
-#! /usr/local/bin/python -O
+#! /usr/bin/env python
 
 #
 # Read e-mail messages from an MH mail directory in my preferred style.
@@ -9,6 +9,7 @@ import email.charset
 import email.header
 import email.message
 import email.parser
+import errno
 import os
 import subprocess
 import sys
@@ -33,10 +34,14 @@ def extract_mh_files(arguments):
 	arguments = ['.']
 
     # Run mhpath to retrive the pathnames of the messages.
-    mhpath_args = [mhpath_path] + arguments
-    mhpath_command = subprocess.Popen(
-      mhpath_args,
-      stdout = subprocess.PIPE)
+    try:
+        mhpath_command = subprocess.Popen(
+          [mhpath_path] + arguments,
+          stdout = subprocess.PIPE)
+    except OSError as err:
+        if err.errno == errno.ENOENT:
+            sys.exit('%s: command not found' % mhpath_path)
+        raise
     so, _ = mhpath_command.communicate()
     message_paths = so.split()
 
