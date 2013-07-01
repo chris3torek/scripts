@@ -182,6 +182,23 @@ class line_data(object):
             self.prefix = ''
             self.text = s
 
+def unexpand(s):
+    '''Replace leading 8-space groups with tabs, a la "unexpand" cmd.
+       Assumes that all tabs are already expanded, i.e., there will
+       be no tabs in s to begin with.'''
+    pos = 0
+    for match in re.finditer(' {8}', s):
+        if match.start() == pos:
+            pos = match.end()
+        else:
+            break
+    return '\t' * (pos / 8) + s[pos:]
+
+def unexpand_lines(s):
+    '''Unexpand, but for multiple lines'''
+    for line in s.split('\n'):
+        yield unexpand(line)
+
 def main():
     '''Process lines from files or from standard input, reflowing
        text where it's reasonable to do so.  Non-ASCII characters
@@ -193,6 +210,8 @@ def main():
         'UTF-8 characters into semi-equivalent ASCII where possible, '
         'and preserving decorations and indentation (but expanding tabs).')
 
+    p.add_argument('--tabs', '-t', action = 'store_true',
+      help = 'use tabs for indentation (note: tabstop=8)')
     p.add_argument('--utf8', '-u', action = 'store_true',
       help = 'preserve UTF-8 character encodings in the input')
     p.add_argument('--width', '-w', type = int,
@@ -265,7 +284,11 @@ def main():
 	    s = line.prefix.rstrip()
 	if args.utf8:
 	    s = s.encode('utf_8')
-	print s
+        if args.tabs:
+            for line in unexpand_lines(s):
+                print line
+        else:
+            print s
 
     return result
 
