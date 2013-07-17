@@ -226,18 +226,17 @@ def main():
       help = 'Score HTML higher than plain text.  Useful when a message '
 	'with alternative parts contains different information in the plain '
 	'text and html alternatives.')
-    p.add_argument('-i', '--images',
+    group = p.add_mutually_exclusive_group()
+    group.add_argument('-i', '--images',
       action = 'store_true', dest = 'images',
       help = 'display multipart pieces of type image/*')
-    p.add_argument('-n', '--no-images',
+    group.add_argument('-n', '--no-images',
       action = 'store_true', dest = 'noimages',
       help = 'suppress display of multipart pieces of type image/*')
     p.add_argument('arguments', metavar = 'msg', nargs = '*',
         help = 'messages to show')
 
     args = p.parse_args()
-    if args.images and args.noimages:
-        p.error('specify at most one of -i (images) or -n (no images)')
 
     if args.html:
 	score_type['text/html'] = 10
