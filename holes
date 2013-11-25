@@ -1,0 +1,344 @@
+#! /usr/bin/env python
+
+"""
+holes - encode / decode files with "holes" to pass
+through regular cp/tar
+"""
+
+import argparse
+from itertools import groupby
+import os
+import signal
+import sys
+
+def format_bytes(nbytes):
+    "format bytes-read or bytes-written in %d.%dMB form"
+    if nbytes <= 1024:
+        return '%d bytes' % nbytes
+    kbytes = nbytes // 1024
+    if kbytes <= 1024:
+        return '%d kiB' % kbytes
+    mbytes = kbytes // 1024
+    kbytes -= mbytes * 1024
+    kfrac = ('%.3f' % (kbytes / 1024.0))[1:3]
+    return '%d%s MiB' % (mbytes, kfrac)
+
+def request_info(signum, frame): # pylint: disable=unused-argument
+    "signal handler for SIGINFO"
+    Gvars.set_siginfo(True)
+
+class GlobalVars(object):
+    "global variables"
+    def __init__(self):
+        self._debug = False
+        self._siginfo = False
+        self._bytes_read = 0
+        self._bytes_written = 0
+        self._hole_bytes = 0
+
+        signal.signal(signal.SIGINFO, request_info)
+
+    def set_debug(self, flag):
+        "update debug flag"
+        self._debug = flag
+
+    def set_siginfo(self, flag):
+        "update siginfo flag"
+        self._siginfo = flag
+
+    def debug(self, fmt, *args):
+        "print debug info if debug flag set"
+        if not self._debug:
+            return
+        if len(args):
+            print >> sys.stderr, fmt % args
+        else:
+            print >> sys.stderr, fmt
+
+    def inc_bytes_read(self, nbytes):
+        "update bytes-read"
+        self._bytes_read += nbytes
+
+    def inc_bytes_written(self, nbytes, as_hole = False):
+        "update bytes-written"
+        self._bytes_written += nbytes
+        if as_hole:
+            self._hole_bytes += nbytes
+
+    def siginfo(self):
+        "print ^T output if requested and good time to do so"
+        if self._siginfo:
+            if self._hole_bytes:
+                print >> sys.stderr, \
+                    '%s bytes read, %s written (%s of those as holes)' % (
+                        format_bytes(self._bytes_read),
+                        format_bytes(self._bytes_written),
+                        format_bytes(self._hole_bytes))
+            else:
+                print >> sys.stderr, '%s bytes read, %s written' % (
+                    format_bytes(self._bytes_read),
+                    format_bytes(self._bytes_written))
+            self._siginfo = False
+
+Gvars = GlobalVars() # pylint: disable=invalid-name
+
+class DecodeError(Exception):
+    "indicates problem with encoded file"
+    pass
+
+def zfile_encode(in_arg, out_arg):
+    """
+    Encode a 'zero file', ie, a file with potential holes.
+    """
+    _zfile_xcode(in_arg, out_arg, _zfile_encode)
+
+def zfile_decode(in_arg, out_arg):
+    """
+    Decode a 'zero file', ie, a file with potential holes.
+    """
+    _zfile_xcode(in_arg, out_arg, _zfile_decode)
+
+def _zfile_xcode(in_arg, out_arg, doit):
+    """
+    Read from in_arg, write en- or de-coded data to out_arg.  If
+    in_arg or out_arg is an integer it's an open file descriptor,
+    if it has a .fileno/.read/.write method it's a stream.
+    """
+    ifd = -1
+    do_i_close = False
+    try:
+        ifd = in_arg.fileno()
+    except AttributeError:
+        if isinstance(in_arg, int):
+            ifd = in_arg
+        else:
+            do_i_close = True
+            ifd = os.open(in_arg, os.O_RDONLY)
+    ostream = None
+    do_o_close = False
+    try:
+        if hasattr(out_arg, 'read') and hasattr(out_arg, 'write'):
+            ostream = out_arg
+        elif isinstance(out_arg, int):
+            ostream = os.fdopen(out_arg)
+        else:
+            do_o_close = True
+            ostream = open(out_arg, 'w')
+        return doit(ifd, ostream)
+    finally:
+        if do_i_close and ifd >= 0:
+            os.close(ifd)
+        if do_o_close and ostream != None:
+            ostream.close()
+
+def _zfile_encode(ifd, ostream):
+    """
+    Guts of encoding a zero-counted file.
+
+    Note: we ignore the underlying file system I/O size when
+    encoding, since we may be writing the file on a different file
+    system block size.  We just look for runs of zero bytes and
+    count them.
+    """
+
+    def enc_zero_bytes(ostream, nbytes):
+        """
+        Short runs are encoded by stuffing an extra \0 at the front,
+        long runs are encoded as \0<count>\0.
+        """
+        if nbytes < 1024:
+            ostream.write('\0' * (nbytes + 1))
+            Gvars.inc_bytes_written(nbytes + 1)
+        else:
+            Gvars.debug('encode %d zeros', nbytes)
+            as_str = '\0' + str(nbytes) + '\0'
+            ostream.write(as_str)
+            Gvars.inc_bytes_written(len(as_str))
+
+    zeros = 0
+    blksize = os.fstat(ifd).st_blksize
+    #blksize = 1024*1024
+    while True:
+        blk = os.read(ifd, blksize)
+        if blk == b'':
+            break
+        Gvars.inc_bytes_read(len(blk))
+        Gvars.siginfo()
+        for is_zero, subblock in groupby(blk, lambda x: x == b'\0'):
+            subblock = ''.join(subblock)
+            if is_zero:
+                zeros += len(subblock)
+                #Gvars.debug('more zeros: now %d' % zeros)
+                continue
+            if zeros:
+                enc_zero_bytes(ostream, zeros)
+                zeros = 0
+            ostream.write(subblock)
+            Gvars.inc_bytes_written(len(subblock))
+    if zeros:
+        Gvars.debug('final encode %d zeros', zeros)
+        enc_zero_bytes(ostream, zeros)
+
+def _zfile_decode(ifd, ostream):
+    # pylint: disable=too-many-branches,too-many-statements
+    # this does need refactoring though
+    """
+    Guts of decoding a zero-counted file.
+    """
+
+    def do_output(ostream, skip_count, zero_bytes, subblock):
+        """
+        Write subblock, perhaps after seeking forward (to perhaps
+        create a hole) or after writing some literal '\0' bytes.
+        """
+        if skip_count:
+            if zero_bytes:
+                raise DecodeError('internal error')
+            Gvars.debug('skip forward %d bytes', skip_count)
+            ostream.seek(skip_count, 1)
+            Gvars.inc_bytes_written(skip_count, True)
+            skip_count = 0
+        elif zero_bytes:
+            #Gvars.debug('write %d zero bytes', (zero_bytes - 1))
+            ostream.write((zero_bytes - 1) * '\0')
+            Gvars.inc_bytes_written(zero_bytes - 1)
+        ostream.write(subblock)
+        Gvars.inc_bytes_written(len(subblock))
+
+    blksize = os.fstat(ifd).st_blksize
+    #blksize = 1024*1024
+    decode_state = 0
+    stringized_count = None
+    skip_count = 0
+    zero_bytes = 0
+    while True:
+        blk = os.read(ifd, blksize)
+        if blk == b'':
+            break
+        Gvars.inc_bytes_read(len(blk))
+        Gvars.siginfo()
+        for is_zero, subblock in groupby(blk, lambda x: x == b'\0'):
+            subblock = ''.join(subblock)
+            if is_zero:
+                zero_bytes += len(subblock)
+                continue
+
+            # Got a run of N b'\0' characters (maybe none)
+            # followed by a block of non-'\0' text.
+            #
+            # Short runs of '\0's are encoded by stuffing an extra
+            # '\0', so we'll have two or more '\0's.  Long runs are
+            # encoded as '\0'<count>'\0'.
+            #
+            # Note that we might have already gotten '\0'<count>
+            # here, in which case decode_state will be 1.
+            #
+            # The encoder never "short-counts" a long run, i.e.,
+            # if we get something like '\0' '1024' '\0' the next
+            # character in the input stream is by definition not '\0'.
+            # So, if decode_state > 0, zero_bytes must be
+            # either 0 (we're at the '24' in '\0' '10' '24' '\0') or
+            # 1 (we got the '\0' and the '1024' and the last '\0',
+            # and now subblock contains whatever comes after the
+            # '\0' and hence zero_bytes==1).
+            if decode_state == 0:
+                if zero_bytes == 1:
+                    decode_state = 1
+                    stringized_count = subblock
+                    if not stringized_count.isdigit():
+                        raise DecodeError('bad zero-byte-count %r' %
+                            stringized_count)
+                    zero_bytes = 0
+                else:
+                    do_output(ostream, skip_count, zero_bytes, subblock)
+                    skip_count = 0
+                    zero_bytes = 0
+                continue
+
+            if decode_state == 1:
+                if zero_bytes:
+                    if zero_bytes > 1:
+                        raise DecodeError('zero-byte-count %r '
+                            'followed by %d zero-bytes -- should be 1' %
+                            (stringized_count, zero_bytes))
+                    # zero_bytes==1 - we've finished the skip_count
+                    skip_count = int(stringized_count)
+                    stringized_count = None
+                    decode_state = 0
+                    do_output(ostream, skip_count, 0, subblock)
+                    skip_count = 0
+                    zero_bytes = 0
+                    continue
+
+                # this is the '\0' '10' '24' '\0' case -- we have
+                # not yet seen the final '\0'; accumulate the '24'
+                stringized_count += subblock
+                if not stringized_count.isdigit():
+                    raise DecodeError('bad zero-byte-count %r' %
+                        stringized_count)
+                continue
+
+            raise DecodeError('internal error, decode_state=%d' %
+                decode_state)
+
+    if decode_state == 1:
+        if zero_bytes != 1:
+            raise DecodeError('zero-byte-count %r '
+                'followed by %d zero-bytes -- should be 1' %
+                (stringized_count, zero_bytes))
+        skip_count = int(stringized_count)
+        stringized_count = None
+        decode_state = 0
+
+    if decode_state != 0:
+        raise DecodeError('internal error, decode_state=%d' % decode_state)
+
+    # zero_bytes encodes 1 more than the actual number needed
+    # (and is 1 if we changed decode_state from 1 to 0 above,
+    # and should be 0 now) -- so subtract 1 if > 0.
+    if zero_bytes:
+        zero_bytes -= 1
+    if skip_count or zero_bytes:
+        Gvars.debug('decode: final skip_count=%d, zero_bytes=%d',
+            skip_count, zero_bytes)
+        skip_count += zero_bytes
+        zero_bytes = 0
+        Gvars.debug('decode: final ftruncate forward %d', skip_count)
+        ostream.flush()
+        os.ftruncate(ostream.fileno(), ostream.tell() + skip_count)
+        Gvars.inc_bytes_written(skip_count, True)
+        # probably don't need the last seek...
+        ostream.seek(skip_count, 1)
+
+def main():
+    "the usual main"
+    parser = argparse.ArgumentParser(prog = 'holes', description =
+        'holes - read or write an encoding for files with possible holes')
+    parser.add_argument('-D', '--debug', action = 'store_true',
+        help = 'turn on internal debug')
+    group = parser.add_mutually_exclusive_group(required = True)
+    group.add_argument('-d', '--decode', action = 'store_true',
+        help = 'decode a zero-hole-encoded file')
+    group.add_argument('-e', '--encode', dest = 'decode',
+        action = 'store_false',
+        help = 'encode a zero-hole-encoded file')
+    parser.add_argument('input', nargs = '?', default=sys.stdin,
+        help = 'specify input file (default=stdin)')
+    parser.add_argument('output', nargs = '?', default=sys.stdout,
+        help = 'specify output file (default=stdout)')
+
+    args = parser.parse_args()
+
+    Gvars.set_debug(args.debug)
+    if args.decode:
+        zfile_decode(args.input, args.output)
+    else:
+        zfile_encode(args.input, args.output)
+
+    return 0
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit('\nInterrupted')
