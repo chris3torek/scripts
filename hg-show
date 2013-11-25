@@ -1,0 +1,9 @@
+#! /bin/sh
+
+# hg-show - helper script for "hg show"
+
+case $# in
+0) $HG log -pv -r .;;
+1) $HG log -pv -r $1;;
+*) $HG log -pv $@;;
+esac
