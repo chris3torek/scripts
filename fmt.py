@@ -9,8 +9,6 @@ import re
 import sys
 import textwrap
 
-PREFIX_RE = re.compile(r''' *\* +|[ >]+|# +''')
-
 CONVERSIONS = {
   ord(u'\N{no-break space}') : u' ',
   ord(u'\N{inverted exclamation mark}') : u'!',
@@ -161,10 +159,9 @@ class line_data(object):
     '''A convenience object that stores the representation of a
        formattable line of text.  It converts all non-ASCII input
        characters into reasonable substitutes, and it splits off
-       any initial prefix containing ">" characters (an e-mail
-       blockquoting convention).'''
+       any initial prefix based on prefix_re.'''
 
-    def __init__(self, s, utf8):
+    def __init__(self, s, utf8, prefix_re):
         try:
             s = s.decode('utf_8')
         except UnicodeError:
@@ -174,7 +171,7 @@ class line_data(object):
 	if not utf8:
 	    s = s.translate(CONVERSIONS)
 	    s = s.encode('ascii', 'xmlcharrefreplace')
-        m = PREFIX_RE.match(s)
+        m = prefix_re.match(s)
         if m:
             self.prefix = s[m.start():m.end()]
             self.text = s[m.end():]
@@ -210,6 +207,8 @@ def main():
         'UTF-8 characters into semi-equivalent ASCII where possible, '
         'and preserving decorations and indentation (but expanding tabs).')
 
+    p.add_argument('-p', '--prefix', default = r'''\s*\*\s+|\s*#\s+|[\s>]+''',
+      help = 'prefix regexp to be ignored')
     p.add_argument('--tabs', '-t', action = 'store_true',
       help = 'use tabs for indentation (note: tabstop=8)')
     p.add_argument('--utf8', '-u', action = 'store_true',
@@ -223,6 +222,10 @@ def main():
 
     args = p.parse_args()
 
+    try:
+        prefix_re = re.compile(args.prefix)
+    except re.error as error:
+        sys.exit('--prefix expression: %s' % str(error))
     input_lines = []
 
     # Semi-compatibility with system "fmt": first two "files", if
@@ -250,14 +253,14 @@ def main():
             try:
                 with open(filename, 'r') as f:
                     for s in f:
-                        input_lines.append(line_data(s, args.utf8))
+                        input_lines.append(line_data(s, args.utf8, prefix_re))
             except IOError as err:
                 print >> sys.stderr, str(err)
                 result = 1
                 continue
     else:
         for s in sys.stdin:
-            input_lines.append(line_data(s, args.utf8))
+            input_lines.append(line_data(s, args.utf8, prefix_re))
 
     merged_lines = []
 
