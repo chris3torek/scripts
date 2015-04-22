@@ -207,7 +207,8 @@ def main():
         'UTF-8 characters into semi-equivalent ASCII where possible, '
         'and preserving decorations and indentation (but expanding tabs).')
 
-    p.add_argument('-p', '--prefix', default = r'''\s*\*\s+|\s*#\s+|[\s>]+''',
+    p.add_argument('-p', '--prefix',
+      default = r'''\s*\*\s+|\s*#\s+|\s*//\s*|[\s>]+''',
       help = 'prefix regexp to be ignored')
     p.add_argument('--tabs', '-t', action = 'store_true',
       help = 'use tabs for indentation (note: tabstop=8)')
