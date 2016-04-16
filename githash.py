@@ -3,8 +3,8 @@
 """
 Compute git hash values.
 
-This is meant to work with both Python2 and Python3, but
-has only been tested with Python2.7.
+This is meant to work with both Python2 and Python3; it
+has been tested with Python2.7 and Python 3.4.
 """
 
 from __future__ import print_function
@@ -41,7 +41,7 @@ def classify(path):
     elif stat.S_ISREG(st.st_mode):
         # 100755 if any execute permission bit set, else 100644
         gitclass = 'blob'
-        mode = '100755' if (st.st_mode & 0111) != 0 else '100644'
+        mode = '100755' if (st.st_mode & 0o111) != 0 else '100644'
     else:
         raise ValueError('un-git-able file system entity %s' % fullpath)
     return mode, gitclass, st.st_size
@@ -52,13 +52,13 @@ def blob_hash(stream, size):
     as read from the given stream.
     """
     hasher = sha1()
-    hasher.update(b'blob %u\0' % size)
+    hasher.update(('blob %u\0' % size).encode('ascii'))
     nread = 0
     while True:
         # We read just 64K at a time to be kind to
         # runtime storage requirements.
         data = stream.read(65536)
-        if data == '':
+        if data == b'':
             break
         nread += len(data)
         hasher.update(data)
@@ -80,7 +80,7 @@ def symlink_hash(path):
     # data bytes are not decode-able into Unicode; it might
     # be nice to have a raw_readlink.
     data = os.readlink(path).encode('utf8')
-    hasher.update(b'blob %u\0' % len(data))
+    hasher.update(('blob %u\0' % len(data)).encode('ascii'))
     hasher.update(data)
     return hasher
 
@@ -126,7 +126,7 @@ def tree_hash(path, args):
 
     args.depth += 1
     hasher = sha1()
-    hasher.update(b'tree %u\0' % tsize)
+    hasher.update(('tree %u\0' % tsize).encode('ascii'))
     for (fullpath, mode, gitclass, esize, encoded_form) in pass1:
         sub_hash = generic_hash(fullpath, mode, esize, args)
         if args.debug: # and args.depth == 0:
@@ -138,7 +138,10 @@ def tree_hash(path, args):
         # than 40 ASCII characters.  This is why we return the
         # hash instance (so we can use .digest() directly).
         # The format here is <mode><sp><path>\0<raw-hash>.
-        hasher.update(b'%s %s\0' % (mode, encoded_form))
+        hasher.update(mode.encode('ascii'))
+        hasher.update(b' ')
+        hasher.update(encoded_form)
+        hasher.update(b'\0')
         hasher.update(sub_hash.digest())
     args.depth -= 1
     return hasher
