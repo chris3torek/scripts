@@ -16,6 +16,24 @@ import sys
 
 from hashlib import sha1
 
+if sys.version_info[0] >= 3:
+    # Python3 encodes "impossible" strings using UTF-8 and
+    # surrogate escapes.  For instance, a file named <\300><\300>eek
+    # (where \300 is octal 300, 0xc0 hex) turns into '\udcc0\udcc0eek'.
+    # This is how we can losslessly re-encode this as a byte string:
+    path_to_bytes = lambda path: path.encode('utf8', 'surrogateescape')
+
+    # If we wish to print one of these byte strings, we have a
+    # problem, because they're not valid UTF-8.  This method
+    # treats the encoded bytes as pass-through, which is
+    # probably the best we can do.
+    bpath_to_str = lambda path: path.decode('unicode_escape')
+else:
+    # Python2 just uses byte strings, so OS paths are already
+    # byte strings and we return them unmodified.
+    path_to_bytes = lambda path: path
+    bpath_to_str = lambda path: path
+
 def strmode(mode):
     """
     Turn internal mode (octal with leading 0s suppressed) into
@@ -74,12 +92,7 @@ def symlink_hash(path):
     the result.
     """
     hasher = sha1()
-    # XXX os.readlink produces a string, even though the
-    # underlying data read from the inode (which git will hash)
-    # are raw bytes.  It's not clear what happens if the raw
-    # data bytes are not decode-able into Unicode; it might
-    # be nice to have a raw_readlink.
-    data = os.readlink(path).encode('utf8')
+    data = path_to_bytes(os.readlink(path))
     hasher.update(('blob %u\0' % len(data)).encode('ascii'))
     hasher.update(data)
     return hasher
@@ -110,7 +123,7 @@ def tree_hash(path, args):
             fullpath = os.path.join(path, entry)
             mode, gitclass, esize = classify(fullpath)
             # git stores as mode<sp><entry-name>\0<digest-bytes>
-            encoded_form = entry.encode('utf8')
+            encoded_form = path_to_bytes(entry)
             tsize += len(mode) + 1 + len(encoded_form) + 1 + 20
             pass1.append((fullpath, mode, gitclass, esize, encoded_form))
 
@@ -132,7 +145,7 @@ def tree_hash(path, args):
         if args.debug: # and args.depth == 0:
             print('%s%s %s %s\t%s' % ('    ' * args.depth,
                 strmode(mode), gitclass, sub_hash.hexdigest(),
-                encoded_form.decode('utf8')))
+                bpath_to_str(encoded_form)))
 
         # Annoyingly, git stores the tree hash as 20 bytes, rather
         # than 40 ASCII characters.  This is why we return the
