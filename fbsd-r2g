@@ -1,0 +1,83 @@
+#! /bin/sh
+#
+# fbsd-r2g
+#
+# This script converts a FreeBSD -r<nnn> SVN revision to
+# a git commit ID, using the git repository stored in
+# git://github.com/freebsd/freebsd.git
+#
+# Note: you must configure your copy of this repository
+# with an additional `fetch =` line, e.g.:
+#
+#    fetch = +refs/notes/*:refs/notes/origin/*
+#
+# Currently, refs/notes/origin/commits is hardcoded into this
+# script.
+
+usage()
+{
+	echo "$0 revision [ ... ]"
+}
+
+warn()
+{
+	printf '%s\n' "$@" 1>&2
+}
+
+die()
+{
+	echo "fatal: $@" 1>&2
+	exit 1
+}
+
+# We read all the notes from the topmost note's tree
+# (as found by the git rev-parse below).  This tree
+# contains files almost named "badf00dc0ffeedeadc0dedeadbeef..."
+# whose contents are the notes for commit "badf00dc0ffee...".
+# However, for performance reasons, git notes sub-tree the
+# note, so that the actual file name is more like "ba/df/00/dc0ffee...".
+#
+# Normally, "git log" uses core.notesRef (which you would
+# set to refs/notes/origin/commits) to look for a file whose
+# name matches a commit, e.g., if it's about to show you commit
+# badf00dc0ffee... it checks for this file in the tree pointed
+# to by the ref in core.notesRef.  It knows to keep going if
+# what it finds is a sub-tree, so if it sees a tree named "ba",
+# it takes that off and looks for "df00dc0ffee...", and so on.
+#
+# We can do a similar job using "git grep", which can search
+# a tree.  (Technically we could just point git grep at the commit
+# and it would find the tree, but this makes sure the tree exists
+# before we even try.)  We know that FreeBSD commits store a
+# note of the form "svn path=...; revision=..." so we grep for
+# the revision= part.
+findrev()
+{
+	local rev path nfound
+
+	git grep -e "revision=${1}$" $TREE > $TF
+	nfound=0
+	while IFS=: read rev path matched; do
+		path=$(echo $path | sed s,/,,g)
+		echo "commit $path ($matched)"
+		nfound=$((nfound + 1))
+	done < $TF
+	test $nfound -gt 0
+}
+
+TF=$(mktemp -t findrev) || die "cannot make temporary file"
+trap "rm -f $TF; exit" 0 1 2 3 15
+
+TREE=$(git rev-parse refs/notes/origin/commits^{tree} 2>/dev/null) ||
+    die "no refs/notes/origin/commits tree - are you in a freebsd repo?"
+
+case $# in
+0) usage; exit 1;;
+*) ;;
+esac
+
+status=0
+for rev do
+	findrev "$rev" || { warn "$rev: not found"; status=1; }
+done
+exit $status
