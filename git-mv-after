@@ -1,0 +1,70 @@
+#! /bin/sh
+#
+# mv-after: script to rename a file in the index
+
+. git-sh-setup # for die() etc
+
+TAB=$'\t'
+
+# should probably use OPTIONS_SPEC, but not yet
+usage()
+{
+	echo "usage: git mv-after oldname newname"
+	echo "${TAB}oldname must exist in the index; newname must not"
+}
+
+case $# in
+2) ;;
+*) usage 1>&2; exit 1;;
+esac
+
+# git ls-files --stage does not test whether the entry is actually
+# in the index; it exits with status 0 even if not.  But it outputs
+# nothing so we can test that.
+#
+# We do, however, want to make sure that the file is at stage zero
+# (only).
+getindex()
+{
+	local output extra
+
+	output="$(git ls-files --stage -- "$1")"
+	[ -z "$output" ] && return 1
+	extra="$(echo "$output" | sed 1d)"
+	[ -z "$extra" ] || return 1
+	set -- $output
+	[ $3 == 0 ] || return 1
+	printf '%s\n' "$output"
+}
+
+# check mode of index entry ($1) against arguments $2...$n
+# return true if it matches one of them
+check_mode()
+{
+	local i mode=$(echo "$1" | sed 's/ .*//')
+
+	shift
+	for i do
+		[ "$mode" = "$i" ] && return 0
+	done
+	return 1
+}
+
+# make sure first entry exists
+entry="$(getindex "$1")" || die "fatal: cannot find $1"
+# make sure second entry does not
+getindex "$2" >/dev/null && die "fatal: $2 already in index"
+
+# make sure the mode is 100644 or 100755, it's not clear
+# whether this works for anything else and it's clearly
+# a bad idea to shuffle a gitlink this way.
+check_mode "$entry" 100644 100755 || die "fatal: $1 is not a regular file"
+
+# use git update-index to change the name.  Replace the first
+# copy's mode with 0, and the second copy's name with the new name.
+# XXX we can't use / as the delimiter in the 2nd sed; use $'\1' as
+# an unlikely character
+CTLA=$'\1'
+printf '%s\n%s\n' "$entry" "$entry" |
+    sed -e "1s/100[67][45][45]/000000/" -e "2s$CTLA$TAB.*$CTLA$TAB$2$CTLA" |
+    git update-index --index-info
