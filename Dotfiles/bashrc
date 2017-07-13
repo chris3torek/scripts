@@ -1,0 +1,128 @@
+# bash-specific settings for all shells
+# (not just login shells)
+
+case $- in
+*i*)	;; # interactive - keep going
+*)	return;;
+esac
+
+if [ "$HOSTOS" == "" ]; then export HOSTOS=$(uname -s); fi
+
+# only works in bash - ignore up to 10 EOFs in a row
+IGNOREEOF=10
+
+# Don't store repeats in history; skip lines with leading space.
+# Append to history on shell exit.
+HISTCONTROL=ignoreboth
+HISTSIZE=1000
+HISTFILESIZE=2000
+shopt -s histappend
+
+# if supported, auto-update $LINES and $COLUMNS from stty window sizes
+shopt -s checkwinsz 2>/dev/null # some bash versions don't do this
+
+# obtain colors if not already set
+[ -z "${COLOR_RESET_ALL}" ] && source $HOME/.shell_colors
+
+# Note, color start/end needs to be bracketed with \001 and \002
+# characters, which is how bash really implements \[...\] in
+# prompts -- bash does the translation at the wrong level for
+# us, so we must do it ourselves.  PSI/PSE stand for Prompt String
+# Init (or Internal or Invisible) and PS-Exit (or External).
+PSI=$'\001' PSE=$'\002'
+
+# Print index and work-tree state: iw=not modified, IW=modified
+# (and modified is red while unmodified is green).
+_git_state()
+{
+	local istate wstate ustate
+
+	# ugh, kind of expensive
+	git update-index -q --ignore-submodules --refresh
+
+	# are we in the middle of merging?
+	if [ -n "$(git ls-files -u)" ]; then
+		printf %s %s \
+		    "${PSI}${COLOR_RED_F}${PSE}merging" \
+		    "${PSI}${COLOR_RESET_ALL}${PSE}"
+		return
+	fi
+	# determine if there are index vs HEAD differences
+	if git diff-index --cached --quiet --ignore-submodules HEAD --; then
+		istate="${PSI}${COLOR_GREEN_F}${PSE}i"
+	else
+		istate="${PSI}${COLOR_RED_F}${PSE}I"
+	fi
+	# determine if there are work-tree vs index differences
+	if git diff-files --quiet --ignore-submodules; then
+		wstate="${PSI}${COLOR_GREEN_F}${PSE}w"
+	else
+		wstate="${PSI}${COLOR_RED_F}${PSE}W"
+	fi
+	# discover untracked files, excluding std vim temps
+	if git ls-files --other | grep -v '\.swp$' >/dev/null; then
+		ustate="${PSI}${COLOR_RED_F}${PSE}U"
+	else
+		ustate="${PSI}${COLOR_GREEN_F}${PSE}u"
+	fi
+	printf %s "$istate$wstate$ustate${PSI}$COLOR_RESET_ALL${PSE}"
+}
+
+# Set Git-state variables to be included in a prompt based on
+# current working directory.  Probably should be generic VCS-
+# state, but this suffices for now.
+_cwd_attributes()
+{
+	if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+		GITSTATE=$(_git_state)
+	else
+		GITSTATE=
+	fi
+}
+
+# We'd like to say when a command fails (returns a failure status).
+# This means we need to keep track of each command as it is run.
+_PREV_CMD= _SHOW_FAILED=true
+trap '[ "$BASH_COMMAND" = _preprompt ] || _PREV_CMD=$BASH_COMMAND _SHOW_FAILED=true' DEBUG
+
+_preprompt()
+{
+	local result=$?
+
+	# 0 = success = no need to show anything
+	# 130 = killed by ^C = uninteresting
+	# 146 = suspended via ^Z = uninteresting
+	# probably any signal state (129 through 129+32) is dull
+	if $_SHOW_FAILED &&
+            [ $result != 0 -a \( $result -lt 129 -o $result -gt 161 \) ]; then
+		echo "${COLOR_RED_F}alert: ${COLOR_BLACK_F}${_PREV_CMD} ${COLOR_RED_F}returned status $result${COLOR_RESET_ALL}"
+		_SHOW_FAILED=false
+	fi
+	_cwd_attributes
+}
+PROMPT_COMMAND=_preprompt
+[ "$(id -n -u)" = torek ] && PS1_USER= || PS1_USER='\u@'
+PS1='\[${COLOR_GREEN_F}\]${PS1_USER}\h.\! ${GITSTATE:+${GITSTATE} }B\$\[${COLOR_RESET_ALL}\] '
+
+# aliases
+alias =uptime
+alias d=dirs
+alias droidtty='stty erase ^\?'
+alias h='history 20'
+alias hh=history
+alias j=jobs
+if [ "$HOSTOS" = Darwin ]; then
+	alias ll='ls -l'
+else
+	alias ll='ls -lg'
+fi
+alias lso='ll -a | sort +4 -rn'
+alias o=popd
+alias p=pushd
+alias so=source
+alias su='su -m'
+alias vi=vim
+
+# these should probably be elsewhere
+export EDITOR=vim
+export VISUAL=vim

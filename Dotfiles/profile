@@ -1,0 +1,86 @@
+# sh/bash settings for login shells, bash and plain-sh.
+# Note that since we are the login shell, $SHELL is
+# either bash or sh; we can also use $0, which works in
+# non-login shell (useful for testing).
+
+export HOSTOS=$(uname -s)
+export HOSTARCH=$(uname -m)
+
+# We can do this to avoid cluttering up $PATH with directories
+# that do not exist, at the cost of having to re-set path if
+# the directories get created.  Provide a setpath function for
+# the latter, and allow it to take arguments that it adds to
+# the standard path.
+#
+# Refinement: avoid adding same path element twice?
+_makepath()
+{
+	local i sep=""
+	for i do
+		if [ -d "$i" ]; then
+			printf %s "${sep}$i"
+			sep=":"
+		fi
+	done
+}
+
+setpathwith()
+{
+	# This used to include /usr/new before /usr/contrb/bin
+	# but I think that convention is long dead now.
+	export PATH="$(_makepath \
+		~torek/bin.$HOSTARCH \
+		~torek/scripts \
+		~torek/.cargo/bin.$HOSTARCH \
+		$HOME/bin \
+		$HOME/.local/bin \
+		"$@" \
+		/usr/local/bin \
+		/usr/local/sbin \
+		/usr/bin \
+		/bin \
+		/usr/bin/X11 \
+		/usr/X11/bin \
+		/usr/contrib/bin \
+		/usr/games \
+		/usr/local/games \
+		/sbin \
+		/usr/sbin \
+		/usr/contrib/mh/bin \
+		/usr/contrib/teTeX/bin \
+		/usr/java/bin \
+		/usr/contrib/kde/bin \
+		/usr/contrib/gnome/bin \
+		/snap/bin
+	)"
+}
+setpathwith
+
+case $0 in
+*bash) alias shell-is-bash=true; export BASH_ENV=$HOME/.bashrc;;
+*) alias shell-is-bash=false; export ENV=$HOME/.shrc;;
+esac
+
+# bash and sh use "type" a bit differently, but both will
+# exit 0 if the command exists (or is an alias).
+command_exists() {
+	type "$1" >/dev/null 2>&1
+}
+
+# if less exists, use it as pager; if lesspipe exists, set its env too
+command_exists less && {
+	export PAGER=less
+	export LESS=FRX
+	command_exists lesspipe && eval $(lesspipe)
+}
+
+# use private termcap file, if using termcap and exists
+[ -f $HOME/.termcap ] && export TERMCAP=$HOME/.termcap
+
+# FreeBSD, MacOS: set stty-status control character
+if stty -a | grep status >/dev/null; then
+	stty status ^T
+fi
+
+# get color settings
+source $HOME/.shell_colors

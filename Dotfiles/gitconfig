@@ -1,0 +1,26 @@
+[alias]
+	lol = log --graph --decorate --oneline
+	lola = log --graph --decorate --oneline --all
+	incoming = log --oneline ..@{u}
+	lin = log ..@{u}
+	mff = merge --ff-only
+	outgoing = log --oneline @{u}..
+	whereami = !git rev-parse --show-cdup | sed 's/^$/./'
+
+[color]
+	diff = auto
+	branch = auto
+
+[diff]
+	renamelimit = 0
+	renames = true
+
+[log]
+	decorate = auto
+
+[merge]
+	conflictstyle = diff3
+
+[user]
+	name = Chris Torek
+	email = chris.torek@gmail.com

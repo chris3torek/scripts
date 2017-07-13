@@ -1,0 +1,20 @@
+# set emacs editing mode in sh
+set -o emacs
+
+if [ "$HOSTOS" == "" ]; then export HOSTOS=$(uname -s); fi
+
+alias d='echo $PWD'
+alias j=jobs
+if [ "$HOSTOS" = Darwin ]; then
+	alias ll='ls -l'
+else
+	alias ll='ls -lg'
+fi
+alias lso='ll -a | sort +4 -rn'
+alias so='.'
+alias su='su -m'
+alias vi=vim
+
+# these should probably be elsewhere
+export EDITOR=vim
+export VISUAL=vim

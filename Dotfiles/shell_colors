@@ -1,0 +1,72 @@
+# shell script fragment - source this as needed
+
+# set color variables, using tput if possible
+if [ "$HOSTOS" == "" ]; then export HOSTOS=$(uname -s); fi
+
+_set_colors_via_tput()
+{
+	local AF AB
+
+	# FreeBSD needs AF and AB, others use setaf, setab
+	if [ "$HOSTOS" = FreeBSD ]; then
+		AF=AF AB=AB
+	else
+		AF=setaf AB=setab
+	fi
+	export COLOR_BLACK_F="$(tput $AF 0)"
+	export COLOR_BLACK_B="$(tput $AB 0)"
+	export COLOR_RED_F="$(tput $AF 1)"
+	export COLOR_RED_B="$(tput $AB 1)"
+	export COLOR_GREEN_F="$(tput $AF 2)"
+	export COLOR_GREEN_B="$(tput $AB 2)"
+	# this yellow is kind of dingy - 11 is better in 16-color setup
+	export COLOR_YELLOW_F="$(tput $AF 3)"
+	export COLOR_YELLOW_B="$(tput $AB 3)"
+	export COLOR_BLUE_F="$(tput $AF 4)"
+	export COLOR_BLUE_B="$(tput $AB 4)"
+	export COLOR_MAGENTA_F="$(tput $AF 5)"
+	export COLOR_MAGENTA_B="$(tput $AB 5)"
+	export COLOR_CYAN_F="$(tput $AF 6)"
+	export COLOR_CYAN_B="$(tput $AB 6)"
+	# this is nominally white, but it's kind of a grey white
+	# (if there are 16 colors, color#15 is brighter)
+	export COLOR_GREY_F="$(tput $AF 7)"
+	export COLOR_GREY_B="$(tput $AB 7)"
+	if [ "$HOSTOS" = FreeBSD ]; then
+		# should be "tput me" but that adds two NULs (??)
+		export COLOR_RESET_ALL=$'\033[0m'
+	else
+		export COLOR_RESET_ALL="$(tput sgr0)"
+	fi
+}
+
+_set_colors_via_raw()
+{
+	export COLOR_BLACK_F=$'\033[30m'
+	export COLOR_BLACK_B=$'\033[40m'
+	export COLOR_RED_F=$'\033[31m'
+	export COLOR_RED_B=$'\033[41m'
+	export COLOR_GREEN_F=$'\033[32m'
+	export COLOR_GREEN_B=$'\033[42m'
+	# this yellow is kind of dingy - 11 is better in 16-color setup
+	export COLOR_YELLOW_F=$'\033[33m'
+	export COLOR_YELLOW_B=$'\033[43m'
+	export COLOR_BLUE_F=$'\033[34m'
+	export COLOR_BLUE_B=$'\033[44m'
+	export COLOR_MAGENTA_F=$'\033[35m'
+	export COLOR_MAGENTA_B=$'\033[45m'
+	export COLOR_CYAN_F=$'\033[36m'
+	export COLOR_CYAN_B=$'\033[46m'
+	# this is nominally white, but it's kind of a grey white
+	# (if there are 16 colors, color#15 is brighter)
+	export COLOR_GREY_F=$'\033[37m'
+	export COLOR_GREY_B=$'\033[47m'
+	export COLOR_RESET_ALL=$'\033[0m'
+}
+
+# do we even have tput?
+if type tput >/dev/null 2>&1; then
+	_set_colors_via_tput
+else
+	_set_color_via_raw
+fi

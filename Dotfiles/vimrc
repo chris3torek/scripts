@@ -1,0 +1,47 @@
+filetype on
+filetype plugin on
+" set ai
+set ic nows
+set nomodeline
+set ffs=unix " disable "file format = dos" detection
+set backspace=indent,eol,start
+inoremap # X#
+syntax enable
+
+autocmd BufNewFile,BufRead zones.*.conf	setf named
+
+" this uses set filetype= because otherwise setf thinks we've
+" already figured it out as a .login file
+autocmd BufNewFile,BufRead $HOME/.login_conf	set filetype=ptcap
+
+" mh Mail files
+autocmd BufNewFile,BufRead $HOME/Mail/*/[[:digit:]]\+,/tmp/mail.*	set filetype=mail
+
+function! ToggleTabs()
+    if &list
+	set nolist
+    else
+	set list listchars=tab:>.,trail:>,precedes:<
+    endif
+endfunction
+
+map <Leader>t :call ToggleTabs()<CR>
+
+" pathogen: search for ~/.vim/bundle/* files...
+execute pathogen#infect()
+
+" not sure I want to use syntastic just yet
+"" syntastic: recommended starter settings
+"set statusline+=%#warningmsg#
+"set statusline+=%{SyntasticStatuslineFlag()}
+"set statusline+=%*
+"
+"let g:syntastic_always_populate_loc_list = 1
+"let g:syntastic_auto_loc_list = 1
+"" I prefer passive mode and :SyntasticCheck
+"" let g:syntastic_check_on_open = 1
+"let g:syntastic_check_on_wq = 0
+"let g:syntastic_mode_map = {
+"    \ "mode": "passive",
+"    \ "active_filetypes": [],
+"    \ "passive_filetypes": [] }
