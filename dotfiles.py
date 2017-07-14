@@ -8,11 +8,12 @@ from __future__ import print_function
 
 import argparse
 import errno
+import itertools
 import os.path
 import shutil
 import stat
 import sys
-# import tarfile -- not yet
+import tarfile
 
 # We'll check for a Dotfiles directory where this program lives.
 SELF = os.path.abspath(__file__)
@@ -651,7 +652,7 @@ def _get_rename_path(path):
         # todo, perhaps: if i > 10; try reading dir?
 
 
-def install(relpath, dfdir, homedir, dryrun, force):
+def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
     """
     Install (or print about installing) dot-files in home directory.
     Home directory names are '.file' which become symlinks to
@@ -669,6 +670,11 @@ def install(relpath, dfdir, homedir, dryrun, force):
     (If the dry run option is set we'll just say that we
     would do this.)  Force is actually a counter: set it
     twice, and we don't bother keeping the originals.
+
+    If mktar is not None, it's a tarfile where we should store
+    the originals, instead of renaming and before blowing
+    away.  In this case, one level of --force suffices to
+    remove the files, since we save them first.
 
     Note: if there is a long path in some name <name>, we may
     need to make directories in homedir, e.g., <name> may be
@@ -741,12 +747,14 @@ def install(relpath, dfdir, homedir, dryrun, force):
             print_error_header()
             print('error: {} {!r}: not a regular file, symlink, or'
                   'directory'.format(tgtinfo.strmode(),
-                                     tgtinfo.strip_prefix(homedir)))
+                                     tgtinfo.strip_prefix(homedir)),
+                  file=sys.stderr)
             errors += 1
             continue
         if tgtinfo.has_oddballs(recurse=True):
             print_error_header()
-            print('error: {} contains special files:'.format(tgtinfo))
+            print('error: {} contains special files:'.format(tgtinfo),
+                  file=sys.stderr)
             print_oddballs(tgtinfo)
             errors += 1
             continue
@@ -768,6 +776,9 @@ def install(relpath, dfdir, homedir, dryrun, force):
                 # We do want a symlink.  If it's good, leave it alone.
                 # If it's wrong, schedule to replace it with the
                 # right one.  Either one will finish the work.
+                #
+                # Note that scheduling it to be removed gets it
+                # added to the tar file, if there is one.
                 rellink = os.path.join(relpath, srcinfo.filename)
                 if tgtinfo.read_symlink() != rellink:
                     rmfiles.append(tgtinfo)
@@ -776,12 +787,12 @@ def install(relpath, dfdir, homedir, dryrun, force):
 
         # Target exists and is not symlink (is dir, file,
         # device, whatever).
-        if force:
+        if force or mktar:
             if relpath is not None:
                 # We're symlinking top level files.
                 # Just rename any non-empty directory or ordinary file;
-                # or remove empty tree, or rm -r if --force --force.
-                if tgtinfo.is_recursively_empty() or force > 1:
+                # or remove empty tree, or rm -r as appropriate.
+                if tgtinfo.is_recursively_empty() or force > 1 or mktar:
                     rmtree(worklist, tgtinfo)
                 else:
                     worklist.rename(tgtinfo, None)
@@ -795,7 +806,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
             # subdirs (that are in the way of any wanted files)
             # and leave or create any subdirs needed (for
             # wanted files).
-            if tgtinfo.is_recursively_empty() or force > 1:
+            if tgtinfo.is_recursively_empty() or force > 1 or mktar:
                 # remove any unwanted dirs and files;
                 # add any missing empty dirs
                 match_dirs(worklist, srcinfo, tgtinfo)
@@ -819,8 +830,14 @@ def install(relpath, dfdir, homedir, dryrun, force):
     if errors:
         return 1
 
-    # Now do, or just show (dryrun), all the file manipulations.
-    dryrun = True # XXX
+    # If making tar file, do that now (even in dry-run mode).
+    if mktar:
+        if worklist.to_rename:
+            raise ValueError('internal error: mktar but renames found')
+        with tarfile.open(mktar, tarmode) as tar:
+            for path in itertools.chain(worklist.to_rmdir, worklist.to_remove):
+                tar.add(path, arcname=strip_prefix(path, homedir),
+                        recursive=False)
 
     worklist.execute(dryrun, location=homedir)
 
@@ -847,6 +864,10 @@ def main():
         help='rename/overwrite existing files/symlinks if needed')
     parser.add_argument('-n', '--dry-run', action='store_true',
         help='show links that would be made, without making them')
+    parser.add_argument('-t', '--tar',
+        help='set name of tar file to hold original dot-files')
+    parser.add_argument('-C', '--compress', choices=['gz', 'bz2'],
+        help='set compression mode for tar file (default = intuit)')
 
     args = parser.parse_args()
     dfdir = args.dotfiles
@@ -868,9 +889,31 @@ def main():
                   file=sys.stderr)
             return 1
 
-    # args.dry_run -- not yet, for testing
+    # should we make a tar file?
+    if args.tar is not None:
+        tarname = args.tar
+        tarmode = args.compress
+        if tarmode is None:
+            if tarname.endswith('.gz'):
+                tarmode = 'gz'
+            elif tarname.endswith('.bz2'):
+                tarmode = 'bz2'
+            else:
+                tarmode = ''
+            tarmode = 'w:' + tarmode
+        if getmode(tarname) is not None:
+            print('error: {} already exists'.format(tarname), file=sys.stderr)
+            return 1
+    else:
+        if args.compress:
+            print('warning: compression mode {} ignored'.format(args.compress),
+                  file=sys.stderr)
+        tarname = None
+        tarmode = None
+
     return install(relpath, dfdir, homedir,
-                   dryrun=args.dry_run, force=args.force)
+                   dryrun=args.dry_run, force=args.force,
+                   mktar=tarname, tarmode=tarmode)
 
 if __name__ == '__main__':
     try:
