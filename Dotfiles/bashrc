@@ -101,7 +101,9 @@ _preprompt()
 	_cwd_attributes
 }
 PROMPT_COMMAND=_preprompt
-[ "$(id -n -u)" = torek ] && PS1_USER= || PS1_USER='\u@'
+# as with \[...\], the \u etc directives only work if not
+# interpolated from another variable, so expand PS1_USER here.
+[ "$(id -n -u)" = torek ] && PS1_USER= || PS1_USER="$(id -n -u)@"
 PS1='\[${COLOR_GREEN_F}\]${PS1_USER}\h.\! ${GITSTATE:+${GITSTATE} }B\$\[${COLOR_RESET_ALL}\] '
 
 # aliases
