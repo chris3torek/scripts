@@ -182,11 +182,15 @@ class WorkList(object):
     # Optionally, we could set a default top level, and _pathfrom
     # would use self.rootpath to construct the absolute path....
     @staticmethod
-    def _pathfrom(arg):
+    def _abspathfrom(arg):
         path = getattr(arg, 'fullname', arg)
         if not os.path.isabs(path):
             raise ValueError('path {} is not absolute'.format(path))
         return path
+
+    @staticmethod
+    def _pathfrom(arg):
+        return getattr(arg, 'fullname', arg)
 
     def rename(self, old, new):
         """
@@ -197,8 +201,8 @@ class WorkList(object):
         that is otherwise the same as the old name but with
         a suffix added."
         """
-        old = self._pathfrom(old)
-        new = _get_rename_path(old) if old is None else self._pathfrom(new)
+        old = self._abspathfrom(old)
+        new = _get_rename_path(old) if old is None else self._abspathfrom(new)
         self.to_rename.append((old, new))
 
     def remove(self, path):
@@ -211,26 +215,26 @@ class WorkList(object):
         if hasattr(path, 'is_dir') and path.is_dir():
             self.to_rmdir.append(self._pathname(path))
         else:
-            self.to_remove.append(self._pathfrom(path))
+            self.to_remove.append(self._abspathfrom(path))
 
     def rmdir(self, path):
         "Schedule directory removal."
-        self.to_rmdir.append(self._pathfrom(path))
+        self.to_rmdir.append(self._abspathfrom(path))
 
     def mkdir(self, path):
         "Schedule directory creation."
-        self.to_mkdir.append(self._pathfrom(path))
+        self.to_mkdir.append(self._abspathfrom(path))
 
     def copyfile(self, old, new):
         "Schedule file copy."
-        old = self._pathfrom(old)
-        new = self._pathfrom(new)
+        old = self._abspathfrom(old)
+        new = self._abspathfrom(new)
         self.to_copy.append((old, new))
 
     def symlink(self, old, new):
         "Schedule symlink of new -> old."
         old = self._pathfrom(old)
-        new = self._pathfrom(new)
+        new = self._abspathfrom(new)
         self.to_symlink.append((old, new))
 
     def execute(self, dryrun, location=None):
@@ -873,7 +877,7 @@ def main():
     dfdir = args.dotfiles
     if dfdir is None:
         dfdir = locate_dotfiles(allow_none=False)
-    dfdir = dfdir
+    dfdir = os.path.abspath(dfdir)
 
     homedir = os.path.abspath(args.homedir)
     if not os.path.isdir(homedir):
