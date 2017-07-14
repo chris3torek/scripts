@@ -30,12 +30,15 @@ class FileInfo(object):
     "regular contents" and "oddball contents"; see
     fileinfo() and get_files_from().  You must pass both!
 
-    The two names are file name (only), and full
-    (including any parent directory that reached this)
-    fullname.  The mode is the value from getmode(), and
-    can be None if the path does not exist.
+    The name argument is the full file name (including any
+    parent directory that reached this).  The mode
+    is the value from getmode(), and can be None if the path
+    does not exist.
+
+    The self.filename property automatically extracts the base
+    name from the full name.
     """
-    def __init__(self, filename, fullname, mode, contents=None, oddballs=None):
+    def __init__(self, fullname, mode, contents=None, oddballs=None):
         # supply both contents and oddbals, or neither
         if (contents is None) != (oddballs is None):
             raise ValueError('invalid call to FileInfo')
@@ -43,7 +46,6 @@ class FileInfo(object):
         is_dir = mode is not None and stat.S_ISDIR(mode)
         if not is_dir and contents is not None:
             raise ValueError('invalid call to FileInfo')
-        self.filename = filename
         self.fullname = fullname
         self.mode = mode
         self._contents = contents
@@ -55,9 +57,8 @@ class FileInfo(object):
         return '{}{}'.format(self.filename, '/' if self.is_dir() else '')
 
     def __repr__(self):
-        return '{}({!r}, {!r}, {!r}, {!r}, {!r})'.format(
-            self.__class__.__name__,
-            self.filename, self.fullname, self.mode,
+        return '{}({!r}, {!r}, {!r}, {!r})'.format(
+            self.__class__.__name__, self.fullname, self.mode,
             self._contents, self._oddballs)
 
     def strmode(self):
@@ -129,6 +130,11 @@ class FileInfo(object):
             raise ValueError('attempt to get contents of '
                              'unsaved dir {!r}'.format(self.fullname))
         return which
+
+    @property
+    def filename(self):
+        "really just os.path.basename(self.fullname)"
+        return os.path.basename(self.fullname)
 
     @property
     def contents(self):
@@ -253,7 +259,7 @@ def _get_files_from(path, recurse, allowfn=None):
     """
     Return tuple: list of all "allowed" files in path,
     list of remaining "oddball" files.
-    
+
     allowfn is the function to test for oddball-ness:
     allowed files are good, others are oddballs.
 
@@ -275,7 +281,7 @@ def _get_files_from(path, recurse, allowfn=None):
         else:
             pair = (None, None)
 
-        info = FileInfo(name, fullpath, mode, pair[0], pair[1])
+        info = FileInfo(fullpath, mode, pair[0], pair[1])
         if allowfn(mode):
             contents.append(info)
         else:
@@ -284,13 +290,12 @@ def _get_files_from(path, recurse, allowfn=None):
     return contents, oddballs
 
 
-def finfo(fname, path, recurse, allowfn=None, always=False):
+def finfo(path, recurse, allowfn=None, always=False):
     """
-    Get FileInfo on path (whose short file name is fname).  If
-    it is a directory, we scan it -- optionally recursively.
-    If allowfn is provided, that determines which files are
-    "good" (allowed) and which are considered "oddball"
-    (e.g., sockets).
+    Get FileInfo on path.  If it is a directory, we scan it --
+    optionally recursively.  If allowfn is provided, that
+    determines which files are "good" (allowed) and which
+    are considered "oddball" (e.g., sockets).
 
     If the path represents a nonexistent file, return None,
     unless always=True, in which case, return an object with
@@ -303,14 +308,14 @@ def finfo(fname, path, recurse, allowfn=None, always=False):
     mode = getmode(path)
     if mode is None:
         if always:
-            return FileInfo(fname, path, None, None, None)
+            return FileInfo(path, None, None, None)
         return None
     pair = (None, None)
     if stat.S_ISDIR(mode):
         if allowfn is None:
             allowfn = allow_dir_or_file_or_symlink
         pair = _get_files_from(path, recurse, allowfn)
-    return FileInfo(fname, path, mode, pair[0], pair[1])
+    return FileInfo(path, mode, pair[0], pair[1])
 
 
 def blank_finfo(info):
@@ -319,7 +324,7 @@ def blank_finfo(info):
     unlink, rmdir, or otherwise get out of the way, make a new
     fileinfo representing a nonexistent file with the same paths.
     """
-    return FileInfo(info.filename, info.fullname, None, None, None)
+    return FileInfo(info.fullname, None, None, None)
 
 
 def flatten_contents(info, postorder=False):
@@ -382,7 +387,7 @@ def transliterate(toppath, subfile, newtop):
     """
     subpath = subfile.strip_prefix(toppath.fullname)
     newpath = os.path.join(newtop.fullname, subpath)
-    return FileInfo(subfile.filename, newpath, None)
+    return FileInfo(newpath, None)
 
 
 def clean_copy(srcinfo, tgtinfo, mkdirs, cpfiles):
@@ -545,7 +550,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
     # files in there, complain about them and stop.
     # (If relpath is None, get file list recursively.)
     recurse = relpath is None
-    info = finfo(os.path.basename(dfdir), dfdir, recurse)
+    info = finfo(dfdir, recurse)
     if info is None:
         print('cannot install from {!r}: no such directory'.format(dfdir),
               file=sys.stderr)
@@ -584,7 +589,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
         tgtname = '.' + srcinfo.filename
         tgtpath = os.path.join(homedir, tgtname)
         # gather recursive scan of everything at the target path
-        tgtinfo = finfo(tgtname, tgtpath, recurse=True,
+        tgtinfo = finfo(tgtpath, recurse=True,
                         allowfn=lambda mode: True, always=True)
 
         if tgtinfo.mode is None:
