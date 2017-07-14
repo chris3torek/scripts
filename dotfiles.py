@@ -384,12 +384,21 @@ def getmode(path, use_stat=False):
     return statresult.st_mode
 
 
-def allow_dir_or_file_or_symlink(mode):
+def allow_std(mode):
     """
     Default "allow" function: allow directories, regular files,
     and symlinks.
     """
     return stat.S_ISDIR(mode) or stat.S_ISREG(mode) or stat.S_ISLNK(mode)
+
+
+def allow_plus_fifo(mode):
+    """
+    Same as above, but also alow fifo files (mkfifo).
+    """
+    if allow_std(mode):
+        return True
+    return stat.S_ISFIFO(mode)
 
 
 def _get_files_from(path, recurse, allowfn=None):
@@ -450,7 +459,7 @@ def finfo(path, recurse, allowfn=None, always=False):
     pair = (None, None)
     if stat.S_ISDIR(mode):
         if allowfn is None:
-            allowfn = allow_dir_or_file_or_symlink
+            allowfn = allow_std
         pair = _get_files_from(path, recurse, allowfn)
     return FileInfo(path, mode, pair[0], pair[1])
 
@@ -670,6 +679,19 @@ def install(relpath, dfdir, homedir, dryrun, force):
     In any case we, make two passes, one to see what to do,
     and one to actually install.
     """
+    def print_error_header():
+        if errors == 0:
+            print('error: cannot install to {}:'.format(homedir),
+                  file=sys.stderr)
+
+    def print_oddballs(info):
+        bad = sorted(flatten_oddballs(info), key=lambda e: e.fullname)
+        for i in bad[:9]:
+            print('  {!r}: {}'.format(i.strip_prefix(dfdir), i.strmode()),
+                  file=sys.stderr)
+        if len(bad) > 9:
+            print('... and {} more'.format(len(bad) - 9), file=sys.stderr)
+
     # Get file info about dfdir.  If there are any problematic
     # files in there, complain about them and stop.
     # (If relpath is None, get file list recursively.)
@@ -687,12 +709,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
     # can always check for this recursively, even if we didn't recurse
     if info.has_oddballs(recurse=True):
         print('cannot install from {} due to:'.format(dfdir), file=sys.stderr)
-        bad = sorted(flatten_oddballs(info), key=lambda e: e.fullname)
-        for i in bad[:9]:
-            print('  {!r}: {}'.format(i.strip_prefix(dfdir), i.strmode()),
-                  file=sys.stderr)
-        if len(bad) > 9:
-            print('... and {} more'.format(len(bad) - 9), file=sys.stderr)
+        print_oddballs(info)
         return 1
 
     # OK, info is a directory and there are no oddball files.  If
@@ -707,7 +724,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
         tgtpath = os.path.join(homedir, tgtname)
         # gather recursive scan of everything at the target path
         tgtinfo = finfo(tgtpath, recurse=True,
-                        allowfn=lambda mode: True, always=True)
+            allowfn=allow_plus_fifo, always=True)
 
         if tgtinfo.mode is None:
             # Target doesn't exist; all we do is copy or symlink,
@@ -717,6 +734,21 @@ def install(relpath, dfdir, homedir, dryrun, force):
             else:
                 rellink = os.path.join(relpath, srcinfo.filename)
                 worklist.symlink(rellink, tgtinfo)
+            continue
+
+        # Refuse to install over top of weird files.
+        if not allow_plus_fifo(tgtinfo.mode):
+            print_error_header()
+            print('error: {} {!r}: not a regular file, symlink, or'
+                  'directory'.format(tgtinfo.strmode(),
+                                     tgtinfo.strip_prefix(homedir)))
+            errors += 1
+            continue
+        if tgtinfo.has_oddballs(recurse=True):
+            print_error_header()
+            print('error: {} contains special files:'.format(tgtinfo))
+            print_oddballs(tgtinfo)
+            errors += 1
             continue
 
         # Target exists.  Now what?
