@@ -54,7 +54,7 @@ class FileInfo(object):
 
     def __str__(self):
         # doesn't (currently) annotate symlinks with @ a la "ls -F"
-        return '{}{}'.format(self.filename, '/' if self.is_dir() else '')
+        return '{}{}'.format(self.fullname, '/' if self.is_dir() else '')
 
     def __repr__(self):
         return '{}({!r}, {!r}, {!r}, {!r})'.format(
@@ -146,6 +146,143 @@ class FileInfo(object):
         "get oddball files within directory"
         return self._dir_contents(self._oddballs)
 
+
+class WorkList(object):
+    """
+    WorkList collects up a list of operations to be done on a
+    set of files (the files themselves are represented by
+    FileInfo objects, or occasionally pairs of FileInfo objects,
+    or by path names - we keep just the path name).
+
+    The operations are:
+     - rename a file or directory (pair: oldname, newname)
+     - remove a file
+     - remove a directory (which must be empty by this point)
+     - create a directory
+     - copy a file (pair: original, copy-dest)
+     - symlink a file (pair: existing, where-link-goes)
+
+    The operations are then done in that order, when you commit
+    them.  Note that we must, in general, do the renames and file
+    removes first so that the directories are empty and can be
+    removed.
+
+    If a name is relative (does not start with /) we need to know
+    "relative to what".  For now all paths should be absolute.
+    """
+    def __init__(self):
+        self.to_rename = []
+        self.to_remove = []
+        self.to_rmdir = []
+        self.to_mkdir = []
+        self.to_copy = []
+        self.to_symlink = []
+
+    # Optionally, we could set a default top level, and _pathfrom
+    # would use self.rootpath to construct the absolute path....
+    @staticmethod
+    def _pathfrom(arg):
+        path = getattr(arg, 'fullname', arg)
+        if not os.path.isabs(path):
+            raise ValueError('path {} is not absolute'.format(path))
+        return path
+
+    def rename(self, old, new):
+        """
+        Schedule file rename.
+
+        As a special case, you can provided None for the new
+        name, which means "generate a name that does not exist
+        that is otherwise the same as the old name but with
+        a suffix added."
+        """
+        old = self._pathfrom(old)
+        new = _get_rename_path(old) if old is None else self._pathfrom(new)
+        self.to_rename.append((old, new))
+
+    def remove(self, path):
+        """
+        Schedule file removal.
+
+        As a special case, if path has an 'is_dir' attribute,
+        we'll schedule a rmdir instead.
+        """
+        if hasattr(path, 'is_dir') and path.is_dir():
+            self.to_rmdir.append(self._pathname(path))
+        else:
+            self.to_remove.append(self._pathfrom(path))
+
+    def rmdir(self, path):
+        "Schedule directory removal."
+        self.to_rmdir.append(self._pathfrom(path))
+
+    def mkdir(self, path):
+        "Schedule directory creation."
+        self.to_mkdir.append(self._pathfrom(path))
+
+    def copyfile(self, old, new):
+        "Schedule file copy."
+        old = self._pathfrom(old)
+        new = self._pathfrom(new)
+        self.to_copy.append((old, new))
+
+    def symlink(self, old, new):
+        "Schedule symlink of new -> old."
+        old = self._pathfrom(old)
+        new = self._pathfrom(new)
+        self.to_symlink.append((old, new))
+
+    def execute(self, dryrun, location=None):
+        """
+        Execute all of the operations, but as if we did a
+        "cd location" first if location is not None.
+        (For now this affects only the printed results.)
+
+        If dryrun is set, just *print* the operations instead.
+
+        This operation is fundamentally destructive (unless
+        doing a dry run) so if any OSError is raised, there is
+        no simple reversal.
+        """
+        if dryrun:
+            if location is not None:
+                print('cd {!r}'.format(location))
+                fmt = lambda path: strip_prefix(path, location)
+            else:
+                fmt = lambda path: path
+
+        for old, new in self.to_rename:
+            if dryrun:
+                print('mv {!r} {!r}'.format(fmt(old), fmt(new)))
+            else:
+                os.rename(old, new)
+        for old in self.to_remove:
+            if dryrun:
+                print('rm {!r}'.format(fmt(old)))
+            else:
+                os.unlink(old)
+        for old in self.to_rmdir:
+            if dryrun:
+                print('rmdir {!r}'.format(fmt(old)))
+            else:
+                os.rmdir(old)
+        for new in self.to_mkdir:
+            if dryrun:
+                print('mkdir {!r}'.format(fmt(new)))
+            else:
+                os.mkdir(new, 0o777)
+        for old, new in self.to_copy:
+            if dryrun:
+                print('cp {!r} {!r}'.format(fmt(old), fmt(new)))
+            else:
+                shutil.copyfile(old, new)
+        for old, new in self.to_symlink:
+            # Although "ls -l" displays these as new -> old, the
+            # ln -s and symlink calls take them in the old, new order.
+            if dryrun:
+                print('ln -s {!r} {!r}'.format(fmt(old), fmt(new)))
+            else:
+                os.symlink(old, new)
 
 
 def locate_dotfiles(allow_none):
@@ -318,15 +455,6 @@ def finfo(path, recurse, allowfn=None, always=False):
     return FileInfo(path, mode, pair[0], pair[1])
 
 
-def blank_finfo(info):
-    """
-    Given an existing FileInfo for a file we intend to rename,
-    unlink, rmdir, or otherwise get out of the way, make a new
-    fileinfo representing a nonexistent file with the same paths.
-    """
-    return FileInfo(info.fullname, None, None, None)
-
-
 def flatten_contents(info, postorder=False):
     """
     Given a directory FileInfo, yield all its contents.  If
@@ -363,62 +491,55 @@ def flatten_oddballs(info):
                 yield j
 
 
-def rmtree(tgtinfo, rmdirs, rmfiles):
+def rmtree(worklist, tgtinfo):
     """
     Remove all files and directories, recursively.
-
-    We don't actually do it here, just add it to our
-    instruction-set.
     """
     if tgtinfo.is_dir():
         for subfile in flatten_contents(tgtinfo):
-            if subfile.is_dir():
-                rmdirs.append(subfile)
-            else:
-                rmfiles.append(subfile)
-        rmdirs.append(tgtinfo)
-    else:
-        rmfiles.append(tgtinfo)
+            worklist.remove(subfile)
+    worklist.remove(tgtinfo)
+
 
 def transliterate(toppath, subfile, newtop):
     """
-    Turn a sub-file of the given top path into a "new subfile"
-    of the new top path.
+    Turn a sub-file of the given top path (eg, vim/foo) into a
+    subfile of the new top path (e.g., .vim/foo).  Result is just
+    a path string.
     """
     subpath = subfile.strip_prefix(toppath.fullname)
-    newpath = os.path.join(newtop.fullname, subpath)
-    return FileInfo(newpath, None)
+    return os.path.join(newtop, subpath)
 
 
-def clean_copy(srcinfo, tgtinfo, mkdirs, cpfiles):
+def clean_copy(worklist, srcinfo, newtop):
     """
     tgtinfo represents a non-existent directory, which
     we must make to make directory srcinfo.  We then
     copy, recursively, all files and sub-directories
-    from srcinfo into tgtinfo.
+    from srcinfo into newtop.
 
-    Note that tgtinfo fullname may be, e.g., .vim while
+    Note that newtop may be, e.g., .vim while
     srcinfo.fullname is just vim - we mkdir the dot version.
-    Subfile names do not get treated this way.
+    Subfile names do not get more dots added.
 
     We don't actually do it here, just add it to our
     instruction-set.
     """
     if srcinfo.is_dir():
-        mkdirs.append(tgtinfo)
+        worklist.mkdir(newtop)
         for subfile in flatten_contents(srcinfo):
             # Strip srcinfo path prefix off, and replace with
-            # a prefix made from tgtinfo instead.
-            newtgt = transliterate(srcinfo, subfile, tgtinfo)
+            # a prefix made from newtop instead.
+            newtgt = transliterate(srcinfo, subfile, newtop)
             if subfile.is_dir():
-                mkdirs.append(newtgt)
+                worklist.mkdir(newtgt)
             else:
-                cpfiles.append((subfile, newtgt))
+                worklist.copyfile(subfile, newtgt)
     else:
-        cpfiles.append((srcinfo, tgtinfo))
+        worklist.copyfile(srcinfo, newtop)
 
 
-def match_dirs(srcinfo, tgtinfo, mkdirs, rmdirs, rmfiles):
+def match_dirs(worklist, srcinfo, tgtinfo):
     """
     rmdir any target dir where it does not have a corresponding
     src dir.  mkdir any target dir where src dir exists but does
@@ -438,24 +559,24 @@ def match_dirs(srcinfo, tgtinfo, mkdirs, rmdirs, rmfiles):
         # use postorder walk, in case we want to remove everything
         for info in flatten_contents(tgtinfo, postorder=True):
             if info.is_dir():
-                # if src is dir, accumulate target dirs;
-                # otherwise remove all target dirs
+                # if src is dir, remember that there is an existing
+                # target dir; otherwise remove the target dir
                 if srcinfo.is_dir():
                     tgt_dirs.append(info)
                 else:
-                    rmdirs.append(info)
+                    worklist.rmdir(info)
             else:
                 # always remove all existing target files
                 # (to get them out of the way)
-                rmfiles.append(info)
+                worklist.remove(info)
     else:
-        rmfiles.append(tgtinfo)
+        worklist.remove(tgtinfo)
 
     # if source is not a dir, we're done
     if not srcinfo.is_dir():
         return
 
-    # sort dirs by full path name
+    # sort all dirs by full path name
     tgt_dirs = sorted(tgt_dirs, key = lambda e: e.fullname)
     src_dirs = sorted((i for i in flatten_contents(srcinfo)
                            if i.is_dir()), key = lambda e: e.fullname)
@@ -473,23 +594,25 @@ def match_dirs(srcinfo, tgtinfo, mkdirs, rmdirs, rmfiles):
         # we will have sdir='c', tdir='d'
         if sdir < tdir:
             # tdir is extra, so rmdir it
-            rmdirs.append(tdir)
+            worklist.rmdir(tdir)
             tgt_dirs.pop()
         else:
             # sdir is missing, so mkdir it
-            mkdirs.append(transliterate(srcinfo, sdir, tgtinfo))
+            worklist.mkdir(transliterate(srcinfo, sdir, tgtinfo.fullname))
             src_dirs.pop()
     # any remaining src dirs are missing
     for sdir in src_dirs:
-        mkdirs.append(transliterate(srcinfo, sdir, tgtinfo))
+        worklist.mkdir(transliterate(srcinfo, sdir, tgtinfo.fullname))
     # any remaining tgt dirs are extra
     for tdir in tgt_dirs:
-        rmdirs.append(tdir)
+        worklist.rmdir(tdir)
 
 
-def copy_files(srcinfo, tgtinfo, cpfiles):
+def copy_files(worklist, srcinfo, newtop):
     """
-    Copy any src file (directories are already matched up).
+    Copy any src file (directories are already matched up),
+    to path starting with (if tree) or consisting of (if file)
+    newtop.
 
     We don't actually do it here, just add it to our
     instruction-set.
@@ -497,12 +620,13 @@ def copy_files(srcinfo, tgtinfo, cpfiles):
     if srcinfo.is_dir():
         for subfile in flatten_contents(srcinfo):
             if not subfile.is_dir():
-                cpfiles.append((subfile, subfile))
+                worklist.copyfile(subfile,
+                                  transliterate(srcinfo, subfile, newtop))
     else:
-        cpfiles.append((srcinfo, tgtinfo))
+        worklist.copyfile(srcinfo, newtop)
 
 
-def make_rename_name(path):
+def _get_rename_path(path):
     """
     Given a file path (e.g., /path/to/foo) that does exist, find
     another name (/path/to/foo.<suffix>) that does not exist.
@@ -575,14 +699,7 @@ def install(relpath, dfdir, homedir, dryrun, force):
     # relpath is not None, info.contents may have sub-directories with
     # unknown contents (e.g., '.vim'); if relpath is None, it may have
     # such dirs, but with known contents.
-    #
-    # Make lists of all the work we want to do.
-    renames = []
-    rmdirs = []
-    rmfiles = []
-    mkdirs = []
-    cpfiles = []
-    symlinks = []
+    worklist = WorkList()
     errors = 0
 
     for srcinfo in info.contents:
@@ -596,9 +713,10 @@ def install(relpath, dfdir, homedir, dryrun, force):
             # Target doesn't exist; all we do is copy or symlink,
             # and that will take care of everything.
             if relpath is None:
-                clean_copy(srcinfo, tgtinfo, mkdirs, cpfiles)
+                clean_copy(worklist, srcinfo, tgtinfo.fullname)
             else:
-                symlinks.append((srcinfo, tgtinfo))
+                rellink = os.path.join(relpath, srcinfo.filename)
+                worklist.symlink(rellink, tgtinfo)
             continue
 
         # Target exists.  Now what?
@@ -609,9 +727,8 @@ def install(relpath, dfdir, homedir, dryrun, force):
                 # and pretend it's gone, so we can do a clean copy
                 # into place.
                 if force:
-                    rmfiles.append(tgtinfo)
-                    tgtinfo = blank_finfo(tgtinfo)
-                    clean_copy(srcinfo, tgtinfo, mkdirs, cpfiles)
+                    worklist.rmfile(tgtinfo)
+                    clean_copy(worklist, srcinfo, tgtinfo.fullname)
                     continue
                 # Fall through to other tests below, to complain
                 # about the symlink in the way.
@@ -619,10 +736,10 @@ def install(relpath, dfdir, homedir, dryrun, force):
                 # We do want a symlink.  If it's good, leave it alone.
                 # If it's wrong, schedule to replace it with the
                 # right one.  Either one will finish the work.
-                dstlink = os.path.join(relpath, srcinfo.filename)
-                if tgtinfo.read_symlink() != dstlink:
+                rellink = os.path.join(relpath, srcinfo.filename)
+                if tgtinfo.read_symlink() != rellink:
                     rmfiles.append(tgtinfo)
-                    symlinks.append((srcinfo, tgtinfo))
+                    worklist.symlink(rellink, tgtinfo)
                 continue
 
         # Target exists and is not symlink (is dir, file,
@@ -633,11 +750,12 @@ def install(relpath, dfdir, homedir, dryrun, force):
                 # Just rename any non-empty directory or ordinary file;
                 # or remove empty tree, or rm -r if --force --force.
                 if tgtinfo.is_recursively_empty() or force > 1:
-                    rmtree(tgtinfo, rmdirs, rmfiles)
+                    rmtree(worklist, tgtinfo)
                 else:
-                    renames.append(tgtinfo)
-                # can just re-use tgtinfo here now, that's safe
-                symlinks.append((srcinfo, tgtinfo))
+                    worklist.rename(tgtinfo, None)
+                # don't need a fake tgtinfo, worklist saves only the name
+                rellink = os.path.join(relpath, srcinfo.filename)
+                worklist.symlink(rellink, tgtinfo)
                 continue
 
             # We're copying all the files.  If the target
@@ -648,15 +766,13 @@ def install(relpath, dfdir, homedir, dryrun, force):
             if tgtinfo.is_recursively_empty() or force > 1:
                 # remove any unwanted dirs and files;
                 # add any missing empty dirs
-                match_dirs(srcinfo, tgtinfo, mkdirs, rmdirs, rmfiles)
+                match_dirs(worklist, srcinfo, tgtinfo)
                 # and copy all regular files
-                copy_files(srcinfo, tgtinfo, cpfiles)
+                copy_files(worklist, srcinfo, tgtinfo.fullname)
             else:
                 # tgt has files - rename it to get it out of the way
-                renames.append(tgtinfo)
-                tgtinfo = blank_finfo(tgtinfo)
-                # now, cleanly mkdir directories and copy files
-                clean_copy(srcinfo, tgtinfo, mkdirs, cpfiles)
+                worklist.rename(tgtinfo, None)
+                clean_copy(worklist, srcinfo, tgtinfo.fullname)
             continue
 
         # Target exists, and force not set.
@@ -673,59 +789,8 @@ def install(relpath, dfdir, homedir, dryrun, force):
 
     # Now do, or just show (dryrun), all the file manipulations.
     dryrun = True # XXX
-    if dryrun:
-        print('cd {}'.format(homedir))
 
-    for info in renames:
-        # pick a new name from the existing name
-        path = os.path.join(homedir, info.fullname)
-        newpath = make_rename_name(path)
-        if dryrun:
-            print('mv {!r} {!r}'.format(strip_prefix(path, homedir),
-                                        strip_prefix(newpath, homedir)))
-        else:
-            os.rename(path, newpath)
-
-    for info in rmfiles:
-        path = os.path.join(homedir, info.fullname)
-        if dryrun:
-            print('rm {!r}'.format(strip_prefix(path, homedir)))
-        else:
-            os.unlink(path)
-
-    for info in rmdirs:
-        path = os.path.join(homedir, info.fullname)
-        if dryrun:
-            print('rmdir {!r}'.format(strip_prefix(path, homedir)))
-        else:
-            os.rmdir(path)
-
-    for info in mkdirs:
-        path = os.path.join(homedir, info.fullname)
-        if dryrun:
-            print('mkdir {!r}'.format(strip_prefix(path, homedir)))
-        else:
-            os.mkdir(path, 0o777)
-
-    for pair in cpfiles:
-        spath = os.path.join(dfdir, pair[0].fullname)
-        dpath = os.path.join(homedir, pair[1].fullname)
-        if dryrun:
-            print('cp {!r} {!r}'.format(strip_prefix(spath, homedir),
-                                        strip_prefix(dpath, homedir)))
-        else:
-            shutil.copyfile(spath, dpath)
-
-    for pair in symlinks:
-        # these are also src <- tgt, which is how
-        # we call os.symlink
-        print('relpath = {}'.format(relpath))
-        spath = os.path.join(relpath, pair[0].strip_prefix(dfdir))
-        dpath = os.path.join(homedir, pair[1].fullname)
-        if dryrun:
-            print('ln -s {!r} {!r}'.format(spath, strip_prefix(dpath, homedir)))
-        else:
-            os.symlink(spath, dpath)
+    worklist.execute(dryrun, location=homedir)
 
     return 0
 
