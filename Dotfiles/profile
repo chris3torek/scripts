@@ -83,4 +83,8 @@ if stty -a | grep status >/dev/null; then
 fi
 
 # get color settings
-source $HOME/.shell_colors
+. $HOME/.shell_colors
+
+# source .bashrc or .shrc
+shell-is-bash && source .bashrc
+shell-is-bash || . .shrc
