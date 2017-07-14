@@ -742,7 +742,7 @@ def main():
     # NB: if dfdir is None, --dotfiles is actually required
     parser.add_argument('--dotfiles', default=dfdir,
         help='set path to dot-files directory (default {})'.format(dfdir))
-    parser.add_argument('--install-to', default=homedir,
+    parser.add_argument('--homedir', default=homedir,
         help='set path for installation (default {})'.format(homedir))
     parser.add_argument('-c', '--copy', action='store_true',
         help='make copies (instead of symlinks)')
@@ -757,7 +757,7 @@ def main():
         dfdir = locate_dotfiles(allow_none=False)
     dfdir = dfdir
 
-    homedir = os.path.abspath(args.install_to)
+    homedir = os.path.abspath(args.homedir)
     if not os.path.isdir(homedir):
         print('error: {} is not a directory'.format(homedir), file=sys.stderr)
         return 1
