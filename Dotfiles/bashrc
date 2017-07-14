@@ -61,7 +61,8 @@ _git_state()
 		wstate="${PSI}${COLOR_RED_F}${PSE}W"
 	fi
 	# discover untracked files, excluding std vim temps
-	if git ls-files --other | grep -v '\.swp$' >/dev/null; then
+	if git ls-files --other --exclude-standard |
+	    grep -v '\.swp$' >/dev/null; then
 		ustate="${PSI}${COLOR_RED_F}${PSE}U"
 	else
 		ustate="${PSI}${COLOR_GREEN_F}${PSE}u"
