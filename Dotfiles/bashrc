@@ -33,6 +33,7 @@ PSI=$'\001' PSE=$'\002'
 
 # Print index and work-tree state: iw=not modified, IW=modified
 # (and modified is red while unmodified is green).
+# NB: leaves final color set to green.
 _git_state()
 {
 	local istate wstate ustate
@@ -44,7 +45,7 @@ _git_state()
 	if [ -n "$(git ls-files -u)" ]; then
 		printf %s %s \
 		    "${PSI}${COLOR_RED_F}${PSE}merging" \
-		    "${PSI}${COLOR_RESET_ALL}${PSE}"
+		    "${PSI}${COLOR_GREEN_F}${PSE}"
 		return
 	fi
 	# determine if there are index vs HEAD differences
@@ -65,7 +66,7 @@ _git_state()
 	else
 		ustate="${PSI}${COLOR_GREEN_F}${PSE}u"
 	fi
-	printf %s "$istate$wstate$ustate${PSI}$COLOR_RESET_ALL${PSE}"
+	printf %s "$istate$wstate$ustate${PSI}${COLOR_GREEN_F}${PSE}"
 }
 
 # Set Git-state variables to be included in a prompt based on
