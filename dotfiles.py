@@ -249,6 +249,14 @@ class WorkList(object):
         doing a dry run) so if any OSError is raised, there is
         no simple reversal.
         """
+        if (len(self.to_rename) +
+                len(self.to_remove) +
+                len(self.to_rmdir) +
+                len(self.to_mkdir) +
+                len(self.to_copy) +
+                len(self.to_symlink)) == 0:
+            # nothing to do - avoid printing location when doing dry-run
+            return
         if dryrun:
             if location is not None:
                 print('cd {!r}'.format(location))
