@@ -26,9 +26,21 @@ _makepath()
 
 setpathwith()
 {
+	local lbin lbin_arch lscripts
+
+	if [ $HOME != ~torek ]; then
+		lbin=$HOME/bin
+		lbin_arch=$HOME/bin.$HOSTARCH
+		lscripts=$HOME/scripts
+	else
+		lbin=
+		lbin_arch
+		lscripts=
+	fi
 	# This used to include /usr/new before /usr/contrb/bin
 	# but I think that convention is long dead now.
 	export PATH="$(_makepath \
+		$lbin $lbin_arch $lscripts \
 		~torek/bin.$HOSTARCH \
 		~torek/scripts \
 		~torek/.cargo/bin.$HOSTARCH \
