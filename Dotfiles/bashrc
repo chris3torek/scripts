@@ -39,11 +39,11 @@ _git_state()
 	local istate wstate ustate
 
 	# ugh, kind of expensive
-	git update-index -q --ignore-submodules --refresh
+	git update-index -q --ignore-submodules --refresh >/dev/null
 
 	# are we in the middle of merging?
 	if [ -n "$(git ls-files -u)" ]; then
-		printf %s %s \
+		printf %s%s \
 		    "${PSI}${COLOR_RED_F}${PSE}merging" \
 		    "${PSI}${COLOR_GREEN_F}${PSE}"
 		return
