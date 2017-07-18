@@ -21,6 +21,9 @@
 [merge]
 	conflictstyle = diff3
 
+[push]
+	default = simple
+
 [user]
 	name = Chris Torek
 	email = chris.torek@gmail.com
