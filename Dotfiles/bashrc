@@ -37,7 +37,8 @@ PSI=$'\001' PSE=$'\002'
 # too.
 _git_untracked_files()
 {
-	git ls-files --other --exclude-standard | grep -v '\.swp$' >/dev/null
+	git -C "$(git rev-parse --show-cdup)" ls-files --other \
+	    --exclude-standard | grep -v '\.swp$' >/dev/null
 }
 
 # Print index and work-tree state: iw=not modified, IW=modified
