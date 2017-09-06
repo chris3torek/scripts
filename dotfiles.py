@@ -202,7 +202,7 @@ class WorkList(object):
         a suffix added."
         """
         old = self._abspathfrom(old)
-        new = _get_rename_path(old) if old is None else self._abspathfrom(new)
+        new = _get_rename_path(old) if new is None else self._abspathfrom(new)
         self.to_rename.append((old, new))
 
     def remove(self, path):
