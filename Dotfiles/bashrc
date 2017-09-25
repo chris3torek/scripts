@@ -139,6 +139,9 @@ alias droidtty='stty erase ^\?'
 alias h='history 20'
 alias hh=history
 alias j=jobs
+# Use C style collation by default in "ls" (for GNU ls).
+# Should we just "export LC_COLLATE=C"?
+alias ls='LC_COLLATE=C ls'
 if [ "$HOSTOS" = Darwin ]; then
 	alias ll='ls -l'
 else
