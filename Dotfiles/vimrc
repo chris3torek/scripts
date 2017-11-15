@@ -26,6 +26,7 @@ function! ToggleTabs()
 endfunction
 
 map <Leader>t :call ToggleTabs()<CR>
+map <Leader><Leader> :nohlsearch<CR>
 
 " pathogen: search for ~/.vim/bundle/* files...
 execute pathogen#infect()
