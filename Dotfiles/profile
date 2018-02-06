@@ -48,6 +48,7 @@ setpathwith()
 		$HOME/.local/bin \
 		"$@" \
 		/usr/local/bin \
+		/usr/local/go/bin \
 		/usr/local/sbin \
 		/usr/bin \
 		/bin \
