@@ -5,6 +5,7 @@ set ic nows
 set nomodeline
 set ffs=unix " disable "file format = dos" detection
 set backspace=indent,eol,start
+set matchpairs+=<:>
 inoremap # X#
 syntax enable
 
