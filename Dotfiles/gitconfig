@@ -15,6 +15,9 @@
 	renamelimit = 0
 	renames = true
 
+[fetch]
+	prune = true
+
 [log]
 	decorate = auto
 
