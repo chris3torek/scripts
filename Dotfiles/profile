@@ -45,8 +45,9 @@ setpathwith()
 		~torek/scripts \
 		~torek/.cargo/bin.$HOSTARCH \
 		$HOME/bin \
-		$HOME/.local/bin \
 		"$@" \
+		$HOME/.local/bin \
+		${GOPATH:-${HOME}}/go/bin \
 		/usr/local/bin \
 		/usr/local/go/bin \
 		/usr/local/sbin \
