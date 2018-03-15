@@ -130,10 +130,14 @@ PROMPT_COMMAND=_preprompt
 # as with \[...\], the \u etc directives only work if not
 # interpolated from another variable, so expand PS1_USER here.
 [ "$(id -n -u)" = torek ] && PS1_USER= || PS1_USER="$(id -n -u)@"
+PROMPT_DIRTRIM=3
 PS1='\[${COLOR_GREEN_F}\]${PS1_USER}\h.\! \w ${GITSTATE:+${GITSTATE} }B\$\[${COLOR_RESET_ALL}\] '
 
 # aliases
 alias =uptime
+# Bash defaults to "cd -L" rather than "cd -P".  Rather than
+# overriding it globally, let's try this for now...
+alias absdir='cd $(pwd -P)'
 alias d=dirs
 alias droidtty='stty erase ^\?'
 alias h='history 20'
