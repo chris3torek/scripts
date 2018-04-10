@@ -34,7 +34,7 @@ setpathwith()
 		lscripts=$HOME/scripts
 	else
 		lbin=
-		lbin_arch
+		lbin_arch=
 		lscripts=
 	fi
 	# This used to include /usr/new before /usr/contrb/bin
