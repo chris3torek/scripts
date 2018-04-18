@@ -6,6 +6,9 @@ set nomodeline
 set ffs=unix " disable "file format = dos" detection
 set backspace=indent,eol,start
 set matchpairs+=<:>
+" For now, use fmt.py for gq commands.  Everything can probably
+" be done directly within vim using formatoptions...
+set formatprg=fmt.py
 inoremap # X#
 syntax enable
 
