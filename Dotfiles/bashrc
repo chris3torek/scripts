@@ -158,6 +158,8 @@ alias so=source
 alias su='su -m'
 alias vi=vim
 
+[ -f $HOME/.bash_${HOSTOS} ] && . $HOME/.bash_${HOSTOS}
+
 # these should probably be elsewhere
 export EDITOR=vim
 export VISUAL=vim

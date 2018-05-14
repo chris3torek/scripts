@@ -1,0 +1,8 @@
+# Linux-specific aliases and shell functions
+
+# this should have a different name, but this suffices
+devices() {
+	for i in /sys/bus/pci/devices/*/net/*/address; do
+		echo $i && cat $i
+	done
+}
