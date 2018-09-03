@@ -8,16 +8,39 @@ export HOSTARCH=$(uname -m)
 
 # We can do this to avoid cluttering up $PATH with directories
 # that do not exist, at the cost of having to re-set path if
-# the directories get created.  Provide a setpath function for
+# the directories get created.  Provide a setpathwith function for
 # the latter, and allow it to take arguments that it adds to
 # the standard path.
-#
-# Refinement: avoid adding same path element twice?
 _makepath()
 {
-	local i sep=""
+	local accum="::" i sep=""
+
+	# Explanation of $accum: we're discarding duplicates in the
+	# path, using the built in "case" construct.  We forbid:
+	#
+	#  empty strings (use "." instead)
+	#  colons (forbiddin in $PATH anyway)
+	#  any of these shell metacharacters: *?[|
+	#
+	# The last four are because they mean something in case
+	# statements and will break the code below, as well as
+	# because they're probably evil in $PATH anyway.
 	for i do
+		case "$i" in
+		*'*'*|*'['*|*'?'*|*'|'*)
+			echo "WARNING: discarding bad path component $i" >&2
+			continue;;
+		esac
+		# Now add the directory if and only if it exists,
+		# but discarding duplicates.  Here, $accum holds a
+		# pattern suitable for `case ":$i:"`.  But we must
+		# "eval" to activate the shell metacharacters in $accum.
 		if [ -d "$i" ]; then
+			eval "case \":$i:\" in
+			$accum) continue;;
+			esac"
+
+			accum="${accum}|:$i:"
 			printf %s "${sep}$i"
 			sep=":"
 		fi
