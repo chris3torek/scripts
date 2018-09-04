@@ -119,6 +119,9 @@ if stty -a | grep status >/dev/null; then
 	stty status ^T
 fi
 
+# Default to UTF-8
+export LANG=en_US.UTF-8
+
 # get color settings
 . $HOME/.shell_colors
 
