@@ -69,6 +69,7 @@ setpathwith()
 		~torek/.cargo/bin.$HOSTARCH \
 		$HOME/bin \
 		"$@" \
+		$HOME/gems/bin \
 		$HOME/.local/bin \
 		${GOPATH:-${HOME}}/go/bin \
 		/usr/local/bin \
