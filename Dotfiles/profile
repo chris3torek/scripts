@@ -74,7 +74,7 @@ setpathwith()
 		"$@" \
 		$HOME/gems/bin \
 		$HOME/.local/bin \
-		${GOPATH:-${HOME}}/go/bin \
+		${GOPATH:-${HOME}/go}/bin \
 		/usr/local/bin \
 		/usr/local/go/bin \
 		/usr/local/sbin \
