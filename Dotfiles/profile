@@ -70,6 +70,7 @@ setpathwith()
 		~torek/scripts \
 		~torek/.cargo/bin.$HOSTARCH \
 		$HOME/bin \
+		$HOME/gems/bin \
 		"$@" \
 		$HOME/gems/bin \
 		$HOME/.local/bin \
@@ -131,3 +132,6 @@ export LANG=en_US.UTF-8
 # source .bashrc or .shrc
 shell-is-bash && source .bashrc
 shell-is-bash || . .shrc
+
+# install Ruby Gems to ~/gems
+export GEM_HOME=$HOME/gems
