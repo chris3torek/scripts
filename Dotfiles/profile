@@ -6,6 +6,8 @@
 export HOSTOS=$(uname -s)
 export HOSTARCH=$(uname -m)
 
+[ -d $HOME/go ] && export GOPATH=$HOME/go
+
 # We can do this to avoid cluttering up $PATH with directories
 # that do not exist, at the cost of having to re-set path if
 # the directories get created.  Provide a setpathwith function for
