@@ -135,7 +135,7 @@ def tree_hash(path, args):
     #
     # (i[4] is the utf-8 encoded form of the name, i[1] is the
     # mode which is '40000' for directories.)
-    pass1.sort(key = lambda i: i[4] + '/' if i[1] == '40000' else i[4])
+    pass1.sort(key = lambda i: i[4] + b'/' if i[1] == '40000' else i[4])
 
     args.depth += 1
     hasher = sha1()
