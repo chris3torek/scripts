@@ -852,6 +852,14 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
                         recursive=False)
 
     worklist.execute(dryrun, location=homedir)
+    postinstall = '{}/.postinstall'.format(homedir)
+    if dryrun:
+        print('if [ -f {} ]; then {}; fi'.format(postinstall))
+    else:
+        if os.path.exists(postinstall):
+            status = subprocess.call(postinstall)
+            if status != 0:
+                print('{}: exit code {}'.format(status))
 
     return 0
 

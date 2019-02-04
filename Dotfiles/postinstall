@@ -1,0 +1,37 @@
+#! /bin/sh
+#
+# run after dotfiles get installed - here we can, e.g.,
+# clone vim packs.
+
+command_exists() {
+	type "$1" >/dev/null 2>&1
+}
+
+install_vim_packs() {
+	local maj min pack
+
+	if ! command_exists vim; then
+		echo "no vim, not installing packs"
+		return
+	fi
+	set -- $(vim --version | head -1)
+	set -- $5
+	maj=${1%.*}
+	min=${1#*.}
+	if [ $maj -lt 8 ]; then
+		echo "vim version $maj < 8, not installing packs"
+		return
+	fi
+	# Run the rest in a subshell, exiting if a command fails.
+	# Ideally we should keep going through all of these packs
+	# but for now there is only one anyway.
+	(
+		set -ex
+		cd $HOME/.vim
+		mkdir -p pack/plugins/start
+		cd pack/plugins/start
+		[ -d vim-go ] || git clone https://github.com/fatih/vim-go
+	)
+}
+
+install_vim_packs
