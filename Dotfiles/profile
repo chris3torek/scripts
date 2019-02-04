@@ -8,94 +8,8 @@ export HOSTARCH=$(uname -m)
 
 [ -d $HOME/go ] && export GOPATH=$HOME/go
 
-# We can do this to avoid cluttering up $PATH with directories
-# that do not exist, at the cost of having to re-set path if
-# the directories get created.  Provide a setpathwith function for
-# the latter, and allow it to take arguments that it adds to
-# the standard path.
-_makepath()
-{
-	local accum="::" i sep=""
-
-	# Explanation of $accum: we're discarding duplicates in the
-	# path, using the built in "case" construct.  We forbid:
-	#
-	#  empty strings (use "." instead)
-	#  colons (forbiddin in $PATH anyway)
-	#  any of these shell metacharacters: *?[|
-	#
-	# The last four are because they mean something in case
-	# statements and will break the code below, as well as
-	# because they're probably evil in $PATH anyway.
-	for i do
-		case "$i" in
-		*'*'*|*'['*|*'?'*|*'|'*)
-			echo "WARNING: discarding bad path component $i" >&2
-			continue;;
-		esac
-		# Now add the directory if and only if it exists,
-		# but discarding duplicates.  Here, $accum holds a
-		# pattern suitable for `case ":$i:"`.  But we must
-		# "eval" to activate the shell metacharacters in $accum.
-		if [ -d "$i" ]; then
-			eval "case \":$i:\" in
-			$accum) continue;;
-			esac"
-
-			accum="${accum}|:$i:"
-			printf %s "${sep}$i"
-			sep=":"
-		fi
-	done
-}
-
-setpathwith()
-{
-	local lbin lbin_arch lscripts
-
-	if [ $HOME != ~torek ]; then
-		lbin=$HOME/bin
-		lbin_arch=$HOME/bin.$HOSTARCH
-		lscripts=$HOME/scripts
-	else
-		lbin=
-		lbin_arch=
-		lscripts=
-	fi
-	# This used to include /usr/new before /usr/contrb/bin
-	# but I think that convention is long dead now.
-	export PATH="$(_makepath \
-		$lbin $lbin_arch $lscripts \
-		~torek/bin.$HOSTARCH \
-		~torek/scripts \
-		~torek/.cargo/bin.$HOSTARCH \
-		$HOME/bin \
-		$HOME/gems/bin \
-		"$@" \
-		$HOME/gems/bin \
-		$HOME/.local/bin \
-		${GOPATH:-${HOME}/go}/bin \
-		/usr/local/bin \
-		/usr/local/go/bin \
-		/usr/local/sbin \
-		/usr/bin \
-		/bin \
-		/usr/bin/X11 \
-		/usr/X11/bin \
-		/usr/contrib/bin \
-		/usr/games \
-		/usr/local/games \
-		/sbin \
-		/usr/sbin \
-		/usr/contrib/mh/bin \
-		/usr/contrib/teTeX/bin \
-		/usr/java/bin \
-		/usr/contrib/kde/bin \
-		/usr/contrib/gnome/bin \
-		/snap/bin
-	)"
-}
-setpathwith
+. $HOME/.sh-common
+resetpathwith
 
 case $0 in
 *bash) alias shell-is-bash=true; export BASH_ENV=$HOME/.bashrc;;
@@ -130,8 +44,8 @@ export LANG=en_US.UTF-8
 . $HOME/.shell_colors
 
 # source .bashrc or .shrc
-shell-is-bash && source .bashrc
-shell-is-bash || . .shrc
+shell-is-bash && source $HOME/.bashrc
+shell-is-bash || . $HOME/.shrc
 
 # install Ruby Gems to ~/gems
 export GEM_HOME=$HOME/gems

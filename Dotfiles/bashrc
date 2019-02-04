@@ -1,6 +1,18 @@
 # bash-specific settings for all shells
 # (not just login shells)
 
+# NB: this is because sudo clears $PATH, even when using
+# sudo -E and/or sudo -s.  Fortunately sudo -s starts a
+# bash that's interactive and reads .bashrc.  This does
+# not help when using sudo with a command, as that forces
+# the shell not to read any dot-files.
+case ${SUDO_COMMAND:+hack} in
+hack)
+	source $HOME/.sh-common
+	resetpathwith
+	;;
+esac
+
 case $- in
 *i*)	;; # interactive - keep going
 *)	return;;
