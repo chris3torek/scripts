@@ -21,9 +21,11 @@ autocmd BufNewFile,BufRead $HOME/.login_conf	set filetype=ptcap
 " mh Mail files
 autocmd BufNewFile,BufRead $HOME/Mail/*/[[:digit:]]\+,/tmp/mail.*	set filetype=mail
 
+" Unfortunately, listchars is global while list is local.
+" But this works well enough if we just do global.
 function! ToggleTabs()
     if &list
-	set nolist
+	set nolist listchars=eol:$
     else
 	set list listchars=tab:>.,trail:>,precedes:<
     endif
