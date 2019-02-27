@@ -145,6 +145,39 @@ PROMPT_COMMAND=_preprompt
 PROMPT_DIRTRIM=3
 PS1='\[${COLOR_GREEN_F}\]${PS1_USER}\h.\! \w ${GITSTATE:+${GITSTATE} }B\$\[${COLOR_RESET_ALL}\] '
 
+# set dirstack (using pushd) to arguments
+restore_dirstack() {
+	local abs cur=${#DIRSTACK[@]} first i
+	local -a newstack
+
+	if [ $# -lt 1 ]; then
+		echo "usage: restore_dir_stack d1 ... dn" 2>&1
+		return 2
+	fi
+	if [ $cur -gt 1 ]; then
+		echo "error: DIRSTACK has $cur elements" 2>&1
+		return 1
+	fi
+	# if arguments are d1 d2 d3, we need to, in effect,
+	# cd d3; pushd d2; pushd d1.
+	#
+	# Some arguments might be relative path names!
+	for i do
+		abs=$(realpath "$i") || return 1
+		newstack=($abs ${newstack[@]})
+	done
+	set -- "${newstack[@]}"
+	first=true
+	for i do
+		if $first; then
+			cd "$i"
+			first=false
+		else
+			pushd "$i"
+		fi
+	done
+}
+
 # aliases
 alias =uptime
 # Bash defaults to "cd -L" rather than "cd -P".  Rather than
