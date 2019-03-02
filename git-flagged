@@ -1,0 +1,124 @@
+#! /usr/bin/env python
+#
+# git-flagged: detect files that are flagged --assume-unchanged
+# and/or --skip-worktree
+
+from __future__ import print_function
+
+import argparse
+import subprocess
+import sys
+
+
+def reset_flag(bc_filename, pr_filename, flag):
+    "reset update-index or skip-worktree flag"
+    ret = subprocess.call(['git', 'update-index', '--no-' + flag, bc_filename])
+    if ret != 0:
+        print('failed to clear {} on {} (update-index '
+              'status {})'.format(flag, pr_filename, ret),
+              file=sys.stderr)
+    return ret
+
+
+def gitescape(path):
+    """
+    Emulate git's trick of escaping unprintable characters in a path.
+    The path argument is a byte-string so we can just check each
+    char.
+
+    TODO: core.quotePath
+    """
+    result = []
+    usequotes = False
+    for c in path:
+        num = ord(c)
+        if num >= 32 and num < 127 and c not in b'"\\"':
+            result.append(chr(num))
+            continue
+        usequotes = True
+        if num == 8:
+            result.append('\\b')
+            continue
+        if num == 9:
+            result.append('\\t')
+            continue
+        if num == 10:
+            result.append('\\n')
+            continue
+        if num == 13:
+            result.append('\\r')
+            continue
+        result.append('\\{:03o}'.format(num))
+    result = ''.join(result)
+    if usequotes:
+        return '"{}"'.format(result)
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description="\
+detect git files with assume-unchanged and/or skip-worktree bits")
+    parser.add_argument('-r', '--reset', action='store_true',
+                        help='clear the flags')
+    parser.add_argument('-q', '--quiet', action='store_false', dest='verbose',
+                        help='inhibit output')
+
+    args = parser.parse_args()
+
+    proc = subprocess.Popen(['git', 'ls-files', '-vz'],
+                            stdout=subprocess.PIPE)
+    data = proc.stdout.read()
+    status = proc.wait()
+    if status != 0:
+        # we'll assume Git printed an error
+        return 1
+
+    # if py2k, b'\0' is '\0' and we're good, if py3k, we're good
+    lines = data.split(b'\0')
+
+    errors = 0
+    for line in lines:
+        # Git likes \0 terminators rather than separators, so
+        # we get one empty line at the end.
+        if len(line) == 0:
+            continue
+        # Assume-unchanged => h, skip-worktree => S, both => s.
+        # Figure out which flag(s) are set, or skip the file.
+        if line[0] == b'h':
+            auf, swf = True, False
+        elif line[0] == b'S':
+            auf, swf = False, True
+        elif line[0] == b's':
+            auf, swf = True, True
+        else:
+            continue
+        # Get OS (byte-coded) and printable (pr) form of
+        # file name, for verbose output.
+        bc_filename = line[2:]
+        pr_filename = gitescape(bc_filename)
+        if args.verbose:
+            flags = []
+            if auf:
+                flags.append('--assume-unchanged')
+            if swf:
+                flags.append('--skip-worktree')
+            print('{}: {}{}'.format(pr_filename,
+                                    'reset ' if args.reset else '',
+                                    ' '.join(flags)))
+        if args.reset:
+            # Annoying: update-index must be used
+            # once per flag.
+            if auf:
+                errors |= reset_flag(bc_filename, pr_filename,
+                                     'assume-unchanged')
+            if swf:
+                errors |= reset_flag(bc_filename, pr_filename,
+                                     'skip-worktree')
+
+    return errors
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit('\nInterrupted')
