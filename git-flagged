@@ -55,13 +55,37 @@ def gitescape(path):
     return result
 
 
+def show_file(args, filename, auf, swf):
+    """
+    Print the file name and its flags.
+
+    If args.list is set, just print the file name.
+    If args.reest is set, announce that we're resetting.
+    (Note: list + reset = reset with list but without announcements.)
+    """
+    if args.list:
+        print(filename)
+        return
+
+    flags = []
+    if auf:
+        flags.append('--assume-unchanged')
+    if swf:
+        flags.append('--skip-worktree')
+    reset = 'reset ' if args.reset else ''
+    print('{}: {}{}'.format(filename, reset, ' '.join(flags)))
+
+
 def main():
     parser = argparse.ArgumentParser(description="\
 detect git files with assume-unchanged and/or skip-worktree bits")
     parser.add_argument('-r', '--reset', action='store_true',
                         help='clear the flags')
-    parser.add_argument('-q', '--quiet', action='store_false', dest='verbose',
-                        help='inhibit output')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-l', '--list', action='store_true',
+                       help='list only the file names, not the flags')
+    group.add_argument('-q', '--quiet', action='store_false', dest='verbose',
+                       help='inhibit output')
 
     args = parser.parse_args()
 
@@ -97,14 +121,7 @@ detect git files with assume-unchanged and/or skip-worktree bits")
         bc_filename = line[2:]
         pr_filename = gitescape(bc_filename)
         if args.verbose:
-            flags = []
-            if auf:
-                flags.append('--assume-unchanged')
-            if swf:
-                flags.append('--skip-worktree')
-            print('{}: {}{}'.format(pr_filename,
-                                    'reset ' if args.reset else '',
-                                    ' '.join(flags)))
+            show_file(args, pr_filename, auf, swf)
         if args.reset:
             # Annoying: update-index must be used
             # once per flag.
