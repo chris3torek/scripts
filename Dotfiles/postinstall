@@ -31,6 +31,7 @@ install_vim_packs() {
 		mkdir -p pack/plugins/start
 		cd pack/plugins/start
 		[ -d vim-go ] || git clone https://github.com/fatih/vim-go
+		[ -d tagbar ] || git clone https://github.com/majutsushi/tagbar
 	)
 }
 

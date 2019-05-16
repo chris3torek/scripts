@@ -55,3 +55,32 @@ execute pathogen#infect()
 "    \ "mode": "passive",
 "    \ "active_filetypes": [],
 "    \ "passive_filetypes": [] }
+
+" gotags and tagbar
+nmap <F8> :TagbarToggle<CR>
+let g:tagbar_type_go = {
+    \ 'ctagstype': 'go',
+    \ 'kinds'    : [
+        \ 'p:package',
+        \ 'i:imports:1',
+        \ 'c:constants',
+        \ 'v:variables',
+        \ 't:types',
+        \ 'n:interfaces',
+        \ 'w:fields',
+        \ 'e:embedded',
+        \ 'm:methods',
+        \ 'r:constructor',
+        \ 'f:functions'
+    \ ],
+    \ 'sro' : '.',
+    \ 'kind2scope' : {
+        \ 't': 'ctype',
+        \ 'n': 'ntype'
+    \ },
+    \ 'ctagsbin' : 'gotags',
+    \ 'ctagsargs': '-sort -silent'
+\ }
+
+" mark columns 81 and 141
+let &colorcolumn="81,141"
