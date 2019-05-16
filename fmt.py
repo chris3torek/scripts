@@ -168,9 +168,9 @@ class line_data(object):
             s = s.decode('iso-8859-1')
         s = s.rstrip()
         s = s.expandtabs()
-	if not utf8:
-	    s = s.translate(CONVERSIONS)
-	    s = s.encode('ascii', 'xmlcharrefreplace')
+        if not utf8:
+            s = s.translate(CONVERSIONS)
+            s = s.encode('ascii', 'xmlcharrefreplace')
         m = prefix_re.match(s)
         if m:
             self.prefix = s[m.start():m.end()]
@@ -267,10 +267,10 @@ def main():
 
     while input_lines:
         line = input_lines.pop(0)
-	if line.text:
-	    while input_lines and input_lines[0].text and \
-	      input_lines[0].prefix == line.prefix:
-		line.text = '%s %s' % (line.text, input_lines.pop(0).text)
+        if line.text:
+            while input_lines and input_lines[0].text and \
+              input_lines[0].prefix == line.prefix:
+                line.text = '%s %s' % (line.text, input_lines.pop(0).text)
         merged_lines.append(line)
 
     wrapper = textwrap.TextWrapper()
@@ -279,15 +279,15 @@ def main():
     # wrapper.drop_whitespace = False
 
     for line in merged_lines:
-	if line.text:
-	    # print '[%s#%s]' % (line.prefix, line.text)
-	    wrapper.initial_indent = line.prefix
-	    wrapper.subsequent_indent = line.prefix
-	    s = wrapper.fill(line.text)
-	else:
-	    s = line.prefix.rstrip()
-	if args.utf8:
-	    s = s.encode('utf_8')
+        if line.text:
+            # print '[%s#%s]' % (line.prefix, line.text)
+            wrapper.initial_indent = line.prefix
+            wrapper.subsequent_indent = line.prefix
+            s = wrapper.fill(line.text)
+        else:
+            s = line.prefix.rstrip()
+        if args.utf8:
+            s = s.encode('utf_8')
         if args.tabs:
             for line in unexpand_lines(s):
                 print line
