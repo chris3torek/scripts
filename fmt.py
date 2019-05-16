@@ -2,6 +2,8 @@
 
 '''A replacement for the fmt utility.'''
 
+from __future__ import print_function
+
 import argparse
 import errno
 import os
@@ -162,14 +164,17 @@ class line_data(object):
        any initial prefix based on prefix_re.'''
 
     def __init__(self, s, utf8, prefix_re):
-        try:
-            s = s.decode('utf_8')
-        except UnicodeError:
-            s = s.decode('iso-8859-1')
+        # in py2k s is a bytes, in py3k it is already a unicode str
+        if isinstance(s, bytes):
+            try:
+                s = s.decode('utf_8')
+            except UnicodeError:
+                s = s.decode('iso-8859-1')
         s = s.rstrip()
         s = s.expandtabs()
         if not utf8:
             s = s.translate(CONVERSIONS)
+        if sys.version_info[0] < 3:
             s = s.encode('ascii', 'xmlcharrefreplace')
         m = prefix_re.match(s)
         if m:
@@ -256,7 +261,7 @@ def main():
                     for s in f:
                         input_lines.append(line_data(s, args.utf8, prefix_re))
             except IOError as err:
-                print >> sys.stderr, str(err)
+                print(str(err), file=sys.stderr)
                 result = 1
                 continue
     else:
@@ -286,13 +291,13 @@ def main():
             s = wrapper.fill(line.text)
         else:
             s = line.prefix.rstrip()
-        if args.utf8:
+        if args.utf8 and sys.version_info[0] < 3:
             s = s.encode('utf_8')
         if args.tabs:
             for line in unexpand_lines(s):
-                print line
+                print(line)
         else:
-            print s
+            print(s)
 
     return result
 
@@ -309,7 +314,7 @@ def read_rc_file(path, values):
             return _parse_rc_stream(stream, values)
     except (OSError, IOError) as err:
         if err.errno != errno.ENOENT:
-           print >> sys.stderr, str(err)
+           print(str(err), file=sys.stderr)
         return values
 
 def _update_int(values, name, newval):
@@ -347,8 +352,8 @@ def _parse_rc_stream(stream, values):
     for lno, line in enumerate(stream, 1):
         parts = parts_re.match(line.strip())
         if not parts:
-            print >> sys.stderr, \
-                "%s:%d: can't parse line; ignored" % (stream.name, lno)
+            print("%s:%d: can't parse line; ignored" % (stream.name, lno),
+                  file=sys.stderr)
             continue
         name = parts.group(1)
         newval = parts.group(2)
@@ -356,12 +361,12 @@ def _parse_rc_stream(stream, values):
             try:
                 updater[type(values[name])](values, name, newval)
             except ValueError as err:
-                print >> sys.stderr, \
-                    "%s:%d: can't set %s = %s (%s); ignored" % \
-                    (stream.name, lno, name, newval, str(err))
+                print("%s:%d: can't set %s = %s (%s); ignored" %
+                      (stream.name, lno, name, newval, str(err)),
+                      file=sys.stderr)
         else:
-            print >> sys.stderr, \
-                '%s:%d: "%s" unknown; ignored' % (stream.name, lno, name)
+            print('%s:%d: "%s" unknown; ignored' % (stream.name, lno, name),
+                  file=sys.stderr)
     return values
 
 if __name__ == '__main__':
