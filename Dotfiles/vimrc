@@ -82,5 +82,9 @@ let g:tagbar_type_go = {
     \ 'ctagsargs': '-sort -silent'
 \ }
 
-" mark columns 81 and 141
+" mark columns 81 and 141 (for go & python)
 let &colorcolumn="81,141"
+function! ToggleHLCols()
+    let &colorcolumn = &colorcolumn == "" ? "81,141" : ""
+endfunction
+map <Leader>c :call ToggleHLCols()<CR>
