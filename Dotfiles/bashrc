@@ -47,10 +47,12 @@ PSI=$'\001' PSE=$'\002'
 # files?  If so, return true (zero status), if not, return
 # false (nonzero status).  This tosses the default vim temporaries
 # too.
+#
+# Argument ($1) is from `git rev-parse --show-cdup`.
 _git_untracked_files()
 {
-	git -C "$(git rev-parse --show-cdup)" ls-files --other \
-	    --exclude-standard | grep -v '\.swp$' >/dev/null
+	git -C "$1" ls-files --other --exclude-standard | \
+	    grep -v '\.swp$' >/dev/null
 }
 
 # Print index and work-tree state: iw=not modified, IW=modified
@@ -58,12 +60,13 @@ _git_untracked_files()
 # NB: leaves final color set to green.
 _git_state()
 {
-	local r orphan istate wstate ustate
+	local r orphan istate wstate ustate cdup
 
 	r=$(git rev-parse -q --verify HEAD) && orphan=false || orphan=true
+	cdup=$(git rev-parse --show-cdup)
 
 	# discover untracked files
-	if _git_untracked_files; then
+	if _git_untracked_files "$cdup"; then
 		ustate="${PSI}${COLOR_RED_F}${PSE}U"
 	else
 		ustate="${PSI}${COLOR_GREEN_F}${PSE}u"
@@ -85,7 +88,7 @@ _git_state()
 	git update-index -q --ignore-submodules --refresh >/dev/null
 
 	# are we in the middle of merging?
-	if [ -n "$(git ls-files -u)" ]; then
+	if [ -n "$(git -C "$cdup" ls-files -u)" ]; then
 		printf %s%s \
 		    "${PSI}${COLOR_RED_F}${PSE}merging" \
 		    "${PSI}${COLOR_GREEN_F}${PSE}"
