@@ -33,8 +33,10 @@ command_exists less && {
 [ -f $HOME/.termcap ] && export TERMCAP=$HOME/.termcap
 
 # FreeBSD, MacOS: set stty-status control character
-if stty -a | grep status >/dev/null; then
-	stty status ^T
+if [ -t 0 ]; then
+	if stty -a | grep status >/dev/null; then
+		stty status ^T
+	fi
 fi
 
 # Default to UTF-8
