@@ -64,9 +64,18 @@ _set_colors_via_raw()
 	export COLOR_RESET_ALL=$'\033[0m'
 }
 
-# do we even have tput?
-if type tput >/dev/null 2>&1; then
+# do we even have tput, and if so, can we use it?
+tput_usable() {
+	# if we have tput, but $TERM is not set or
+	# is set to "dumb", tput is not usable
+	case "$TERM" in
+	""|dumb) return 1;;
+	esac
+	# $TERM is set, so search for tput
+	type tput >/dev/null 2>&1
+}
+if tput_usable; then
 	_set_colors_via_tput
 else
-	_set_color_via_raw
+	_set_colors_via_raw
 fi
