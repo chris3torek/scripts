@@ -12,8 +12,8 @@ export HOSTARCH=$(uname -m)
 resetpathwith
 
 case $0 in
-*bash) alias shell-is-bash=true; export BASH_ENV=$HOME/.bashrc;;
-*) alias shell-is-bash=false; export ENV=$HOME/.shrc;;
+*bash) shell-is-bash() { true; }; export BASH_ENV=$HOME/.bashrc;;
+*) shell-is-bash() { false; }; export ENV=$HOME/.shrc;;
 esac
 
 # bash and sh use "type" a bit differently, but both will
