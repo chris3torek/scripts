@@ -74,8 +74,13 @@ _git_state()
 
 	if $orphan; then
 		r=$(git symbolic-ref --short HEAD)
-		# orphan branch - there is no HEAD to compare against
-		istate="${PSI}${COLOR_BLACK_F}${PSE}-"
+		# Orphan branch - there is no HEAD to compare against.
+		# We can, however, check for index files.
+		if [ $(git ls-files | wc -l) -ne 0 ]; then
+			istate="${PSI}${COLOR_RED_F}${PSE}I"
+		else
+			istate="${PSI}${COLOR_BLACK_F}${PSE}-"
+		fi
 		wstate="-"
 		printf %s%s%s \
 		    "${PSI}${COLOR_RED_F}${PSE}unborn $r " \
