@@ -90,7 +90,7 @@ _git_state()
 	fi
 
 	# ugh, kind of expensive
-	git update-index -q --ignore-submodules --refresh >/dev/null
+	git update-index -q--refresh >/dev/null
 
 	# are we in the middle of merging?
 	if [ -n "$(git -C "$cdup" ls-files -u)" ]; then
@@ -100,13 +100,13 @@ _git_state()
 		return
 	fi
 	# determine if there are index vs HEAD differences
-	if git diff-index --cached --quiet --ignore-submodules HEAD --; then
+	if git diff-index --cached --quiet HEAD --; then
 		istate="${PSI}${COLOR_GREEN_F}${PSE}i"
 	else
 		istate="${PSI}${COLOR_RED_F}${PSE}I"
 	fi
 	# determine if there are work-tree vs index differences
-	if git diff-files --quiet --ignore-submodules; then
+	if git diff-files --quiet; then
 		wstate="${PSI}${COLOR_GREEN_F}${PSE}w"
 	else
 		wstate="${PSI}${COLOR_RED_F}${PSE}W"
