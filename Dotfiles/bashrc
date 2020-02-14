@@ -186,6 +186,25 @@ restore_dirstack() {
 	done
 }
 
+# Test whether "ls -l" implies "see group ID", or requires a
+# separate "-g" argument, "ls -lg", to see the group ID.
+# Returns true (exits zero) if "ls -l" shows the group too.
+ls-l-implies-g() {
+	# Method: Run both commands. If the output is longer
+	# with -l only, -g must *suppress* the group name/id
+	# (Darwin, Linux, etc).  If they're the same length,
+	# -g is optional (modern FreeBSD).  If the output is
+	# shorter without -g, -g must *add* the group (old
+	# BSD).  So if "with $g" >= "sans $g", we want "ls -l",
+	# not "ls -lg", to get both.
+	local withg sansg
+	set -- $(ls -l /dev/null)
+	withg=$#
+	set -- $(ls -lg /dev/null)
+	sansg=$#
+	test $withg -ge $sansg
+}
+
 # aliases
 alias =uptime
 # Bash defaults to "cd -L" rather than "cd -P".  Rather than
@@ -199,7 +218,9 @@ alias j=jobs
 # Use C style collation by default in "ls" (for GNU ls).
 # Should we just "export LC_COLLATE=C"?
 alias ls='LC_COLLATE=C ls'
-if [ "$HOSTOS" = Darwin ]; then
+# ls -l implies -g on most systems today; add `-g` on systems
+# where it does not
+if ls-l-implies-g; then
 	alias ll='ls -l'
 else
 	alias ll='ls -lg'
