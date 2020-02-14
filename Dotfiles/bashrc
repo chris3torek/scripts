@@ -90,7 +90,7 @@ _git_state()
 	fi
 
 	# ugh, kind of expensive
-	git update-index -q--refresh >/dev/null
+	git update-index -q --refresh >/dev/null
 
 	# are we in the middle of merging?
 	if [ -n "$(git -C "$cdup" ls-files -u)" ]; then
