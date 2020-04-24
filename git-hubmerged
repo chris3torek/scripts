@@ -1,0 +1,125 @@
+#! /bin/sh -e
+#
+# hub-merged: script to test if a branch has been merged on
+# GitHub via either the merge button *or* the rebase-and-merge
+# variant of that button.
+
+dashless=$(basename "$0" | sed -e 's/-/ /')
+OPTIONS_SPEC="\
+$dashless [options] commit-ish
+--
+h,help    show this help
+b,branch= test the given branch name/commit, instead of HEAD
+"
+
+. git-sh-setup
+
+right=HEAD
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-b)
+		[ $# -ge 2 ] || usage
+		right="$2"; shift;;
+	--)	shift; break;;
+	*)	usage;;
+	esac
+	shift
+done
+[ $# -eq 1 ] || usage
+
+# Argument must name a commit.  A branch name is fine, but
+# what we need here is a commit, in the end.
+left="$1"
+left_c=$(git rev-parse "$left")
+left_c=$(git rev-parse ${left_c}^{commit})
+
+# HEAD (or -b argument) must name a commit.  Ideally it *should*
+# name a branch, too.
+right_c=$(git rev-parse --quiet --verify "$right") ||
+    die "$right: not a commit or branch name"
+right_n=$(git rev-parse --quiet --verify --symbolic-full-name "$right")
+[ "$right_n" != "" ] ||
+    printf "%s: not a branch name, continuing anyway\n" "$right"
+right_c=$(git rev-parse $right_c^{commit} 2>/dev/null) ||
+    die "$right: does not lead to a commit"
+
+# If the left commit *is* the right commit, the test is pointless;
+# let's check for that now and quit early.
+if [ $left_c = $right_c ]; then
+	echo "$left and $right name the same commit $left_c"
+	echo "(so, that qualifies as hub-merged)"
+	exit 0
+fi
+
+# We need four temporary files that we should clean up on exit.
+TF1=
+TF2=
+TFL=
+TFR=
+trap 'rm -f $TF1 $TF2 $TFL $TFR' 0 1 2 3 15
+
+TF1=$(mktemp)
+TF2=$(mktemp)
+TFL=$(mktemp)
+TFR=$(mktemp)
+
+# Define functions for testing commit "equality".  We demand that
+# two commits store the same tree, have the same author, and have
+# everything else the same (log message etc) except for the committer
+# name/email/timestamp and the parent hashes.  (Note that this
+# counts merges as "equal", somewhat erroneously; we should
+# ideally only drop the *first* parent line.)
+trimcommit() {
+	git cat-file -p $1 | sed -e '1,/^$/{/^committer /d;/^parent /d;}'
+}
+commiteq() {
+	trimcommit $1 > /tmp/$TF1
+	trimcommit $2 > /tmp/$TF2
+	cmp -s /tmp/$TF1 /tmp/$TF2
+}
+
+set -x
+# Obtain hash IDs on left (mainline) and right sides.
+git rev-list --reverse --topo-order --left-only $left_c...$right_c > $TFL
+git rev-list --reverse --topo-order --right-only $left_c...$right_c > $TFR
+
+# Make sure both sides are nonempty, otherwise we can't really do anything.
+if [ ! -s $TFL -a ! -s $TFR ]; then
+	echo cannot help you - check your inputs
+	exit 2  # signaling failure to test
+fi
+
+# Open the two files for input, and grab the first hash ID from each.
+# The reads should succeed because the files are nonempty.
+exec 3< $TFL 4< $TFR
+read l <&3
+read r <&4
+
+# Look for a mainline commit that matches the topmost feature commit.
+# This is our starting point to decide whether F is "almost merged" into M.
+while ! commiteq $l $r; do
+	# Drop the top-most left-side commit by reading another.
+	if ! read l <&3; then
+		echo "not hub-merged: right-side commits are missing"
+		exit 1
+	fi
+done
+
+# Topmost commits match, so drop them.  Read the remaining right side
+# commits and require each left-side commit to match.
+while read l <&3 && read r <&4; do
+	if ! commiteq $l $r; then
+		echo not hub-merged
+		exit 1
+	fi
+done
+
+# If there are more lines in $TFL, there are some commits
+# we're allowing.  We can check for that by trying to read again.
+# Here, I don't bother.
+
+case "$right_n" in
+"") echo "$right_c is hub-merged within $left"
+*) echo "$right_n is hub-merged within $left"
+esac
+exit 0
