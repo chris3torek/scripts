@@ -11,6 +11,7 @@ $dashless [options] commit-ish
 h,help    show this help
 b,branch= test the given branch name/commit, instead of HEAD
 "
+SUBDIRECTORY_OK=true
 
 . git-sh-setup
 
@@ -73,19 +74,19 @@ trimcommit() {
 	git cat-file -p $1 | sed -e '1,/^$/{/^committer /d;/^parent /d;}'
 }
 commiteq() {
-	trimcommit $1 > /tmp/$TF1
-	trimcommit $2 > /tmp/$TF2
-	cmp -s /tmp/$TF1 /tmp/$TF2
+	trimcommit $1 > $TF1
+	trimcommit $2 > $TF2
+	cmp -s $TF1 $TF2
 }
 
-set -x
 # Obtain hash IDs on left (mainline) and right sides.
 git rev-list --reverse --topo-order --left-only $left_c...$right_c > $TFL
 git rev-list --reverse --topo-order --right-only $left_c...$right_c > $TFR
 
 # Make sure both sides are nonempty, otherwise we can't really do anything.
 if [ ! -s $TFL -a ! -s $TFR ]; then
-	echo cannot help you - check your inputs
+	echo "ERROR: $left...$right do not produce commits to inspect."
+	echo "Cannot help you; check your input arguments."
 	exit 2  # signaling failure to test
 fi
 
@@ -100,7 +101,7 @@ read r <&4
 while ! commiteq $l $r; do
 	# Drop the top-most left-side commit by reading another.
 	if ! read l <&3; then
-		echo "not hub-merged: right-side commits are missing"
+		echo "NO: right-side commits are missing"
 		exit 1
 	fi
 done
@@ -109,7 +110,7 @@ done
 # commits and require each left-side commit to match.
 while read l <&3 && read r <&4; do
 	if ! commiteq $l $r; then
-		echo not hub-merged
+		echo "NO: commits do not match"
 		exit 1
 	fi
 done
@@ -119,7 +120,7 @@ done
 # Here, I don't bother.
 
 case "$right_n" in
-"") echo "$right_c is hub-merged within $left"
-*) echo "$right_n is hub-merged within $left"
+"") echo "YES: $left is hub-merged within $right_c";;
+*) echo "YES: $left is hub-merged within $right_n";;
 esac
 exit 0
