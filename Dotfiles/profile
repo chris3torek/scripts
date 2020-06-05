@@ -16,6 +16,11 @@ case $0 in
 *) shell-is-bash() { false; }; export ENV=$HOME/.shrc;;
 esac
 
+case "${SSH_AUTH_SOCK:+set}" in
+set) ;;
+*) eval `ssh-agent`
+esac
+
 # bash and sh use "type" a bit differently, but both will
 # exit 0 if the command exists (or is an alias).
 command_exists() {
