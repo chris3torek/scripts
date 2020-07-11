@@ -53,7 +53,7 @@ die()
 # the revision= part.
 findrev()
 {
-	local rev path nfound
+	local rev path nraw nvalid status
 
 	# remove leading "r" or "-r" if present; argument will
 	# be svn-style r12345 or -r12345, and we just want the rev.
@@ -63,14 +63,38 @@ findrev()
 	r*) rev=${rev#r};;
 	esac
 
-	git grep -e "revision=${1}$" $TREE > $TF
-	nfound=0
+	# This finds lines such as:
+	#
+	#     $TREE:$path/$to/$file:svn path=/head/; revision=352558
+	#
+	# The $TREE part is our $TREE argument, hence not useful.
+	# We really just need the $path/to/file part -- e.g.,
+	# 57/bb/1dff57ee60eac5aed02043a3903ccce141bc -- within
+	# that tree.  Stripping out the slashes gives us the commit
+	# hash ID for the right commit.
+	git grep -e "revision=${rev}$" $TREE > $TF
+
+	# We might not find any notes.  Even if we do, some
+	# svn commits get a note, then wind up not in the local
+	# repository.
+	nraw=0
+	nvalid=0
 	while IFS=: read rev path matched; do
 		path=$(echo $path | sed s,/,,g)
-		echo "commit $path ($matched)"
-		nfound=$((nfound + 1))
+		nraw=$((nraw + 1))
+		# Note: git rev-parse always believes a raw hash
+		# is valid, so test with ^{commit}.
+		if git rev-parse -q --verify $path^{commit} >/dev/null; then
+			nvalid=$((nvalid + 1))
+			status=""
+		else
+			status=" -- NOT IN REPO"
+		fi
+		echo "commit $path ($matched)$status"
 	done < $TF
-	test $nfound -gt 0
+	# not sure which test to use here, let's use nvalid for now
+	#test $nraw -gt 0
+	test $nvalid -gt 0
 }
 
 TF=$(mktemp -t findrev) || die "cannot make temporary file"
