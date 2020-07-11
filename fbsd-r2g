@@ -55,6 +55,14 @@ findrev()
 {
 	local rev path nfound
 
+	# remove leading "r" or "-r" if present; argument will
+	# be svn-style r12345 or -r12345, and we just want the rev.
+	rev="$1"
+	case "$rev" in
+	-r*) rev=${rev#-r};;
+	r*) rev=${rev#r};;
+	esac
+
 	git grep -e "revision=${1}$" $TREE > $TF
 	nfound=0
 	while IFS=: read rev path matched; do
