@@ -1,0 +1,17 @@
+#! /bin/sh
+#
+# Find out which tags keep commits alive, that are not also
+# kept alive by some branch name.
+git for-each-ref --format='%(refname:short) %(objecttype) %(objectname) %(*objecttype) %(*objectname)' refs/tags |
+while read name dtype dobj itype iobj; do
+	if [ $dtype = tag ]; then
+		otype=$itype obj=$iobj
+	else
+		otype=$dtype obj=$dobj
+	fi
+	[ $otype == commit ] || continue
+	n=$(git for-each-ref refs/heads --contains $obj | wc -l)
+	if [ $n -eq 0 ]; then
+		echo "tag $name keeps $obj alive"
+	fi
+done
