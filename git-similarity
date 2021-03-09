@@ -26,7 +26,10 @@ TF=$(mktemp) || exit 1
 trap "rm -f $TF" 0 1 2 3 15
 export GIT_INDEX_FILE=$TF
 
-# create a tree holding (just) the argument file
+# Create a tree holding (just) the argument file.
+# TODO: handle files outside the repository entirely, by
+# using git hash-object and git mktree directly.  (This
+# will also remove the need for the temporary-file index.)
 maketree() {
 	rm -f $TF
 	git add "$1" || exit 1
@@ -37,7 +40,7 @@ maketree() {
 # the form Rnnn$TAB$file1$TAB$file2, but if we get two lines,
 # with D and A, we'll just print 000 here.
 print_similarity() {
-	set $(git diff-tree --name-status --find-renames=01 $1 $2)
+	set $(git diff-tree -r --name-status --find-renames=01 $1 $2)
 	case "$1" in
 	R*) echo "${1#R}";;
 	*) echo "000";;
