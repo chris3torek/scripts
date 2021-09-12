@@ -31,7 +31,8 @@ def gitescape(path):
     result = []
     usequotes = False
     for c in path:
-        num = ord(c)
+        # py2k: c is str; py3k, c is number
+        num = ord(c) if isinstance(c, str) else c
         if num >= 32 and num < 127 and c not in b'"\\"':
             result.append(chr(num))
             continue
@@ -108,11 +109,16 @@ detect git files with assume-unchanged and/or skip-worktree bits")
             continue
         # Assume-unchanged => h, skip-worktree => S, both => s.
         # Figure out which flag(s) are set, or skip the file.
-        if line[0] == b'h':
+        #
+        # Note: the weird b'h'[0] etc is a trick to make this
+        # work regardless of whether we're using py2k (where
+        # line holds a string and b'h' is a string) or a list
+        # of bytes (where line[0] is a number, and so is b'h'[0]).
+        if line[0] == b'h'[0]:
             auf, swf = True, False
-        elif line[0] == b'S':
+        elif line[0] == b'S'[0]:
             auf, swf = False, True
-        elif line[0] == b's':
+        elif line[0] == b's'[0]:
             auf, swf = True, True
         else:
             continue
