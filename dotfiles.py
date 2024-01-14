@@ -855,7 +855,7 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
     worklist.execute(dryrun, location=homedir)
     postinstall = '{}/.postinstall'.format(homedir)
     if dryrun:
-        print('if [ -f {} ]; then {}; fi'.format(postinstall))
+        print('if [ -f {} ]; then {}; fi'.format(postinstall, postinstall))
     else:
         if os.path.exists(postinstall):
             status = subprocess.call(postinstall)
