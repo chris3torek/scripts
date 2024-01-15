@@ -23,6 +23,9 @@ if [ "$HOSTOS" == "" ]; then export HOSTOS=$(uname -s); fi
 # only works in bash - ignore up to 10 EOFs in a row
 IGNOREEOF=10
 
+# do git prompt by default
+_gitprompt=true
+
 # Don't store repeats in history; skip lines with leading space.
 # Append to history on shell exit.
 HISTCONTROL=ignoreboth
@@ -119,7 +122,7 @@ _git_state()
 # state, but this suffices for now.
 _cwd_attributes()
 {
-	if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+	if $_gitprompt && [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
 		GITSTATE=$(_git_state)
 	else
 		GITSTATE=
@@ -237,3 +240,7 @@ alias vi=vim
 # these should probably be elsewhere
 export EDITOR=vim
 export VISUAL=vim
+
+# Some really big git repositories are slow -- allow switching prompt
+alias gitoff='_gitprompt=false'
+alias giton='_gitprompt=true'
