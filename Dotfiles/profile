@@ -16,9 +16,31 @@ case $0 in
 *) shell-is-bash() { false; }; export ENV=$HOME/.shrc;;
 esac
 
+# Try to borrow an existing ssh agent if we can find one
+ssh_activate() {
+	local d
+	for d in /tmp/ssh-*; do
+		if [ "$d" = "/tmp/ssh-*" ]; then continue; fi
+		set "$d"/agent.*
+		if [ $# = 1 ]; then
+			# ssh-add -l exits 0 or 1 if it works,
+			# and 2 if it cannot reach the agent
+			SSH_AUTH_SOCK="$1" ssh-add -l >/dev/null 2>&1
+			case $? in
+			0|1)
+				echo "borrowing SSH agent via $1"
+				export SSH_AUTH_SOCK="$1"
+				return 0;;
+			esac
+		fi
+	done
+	_stop_ssh_on_logout=yes
+	eval `ssh-agent`
+}
+
 case "${SSH_AUTH_SOCK:+set}" in
 set) ;;
-*) eval `ssh-agent`
+*) ssh_activate;;
 esac
 
 # bash and sh use "type" a bit differently, but both will

@@ -1,0 +1,6 @@
+# Clean up ssh when we log out.
+# We use this slightly funky construct in case $_stop_ssh_on_logout
+# is unset, as "if $unset; then cmd; fi" runs the command.
+if [ "$_stop_ssh_on_logout" = "yes" ]; then
+	ssh-agent -k
+fi
