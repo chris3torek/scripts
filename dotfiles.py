@@ -1,10 +1,8 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 """
 Dotfiles: set up home directory .foorc files.
 """
-
-from __future__ import print_function
 
 import argparse
 import errno
@@ -20,7 +18,7 @@ import tarfile
 SELF = os.path.abspath(__file__)
 
 
-class FileInfo(object):
+class FileInfo:
     """
     Each file that is to be manipulated is either a
     regular file, symlink, or directory.  We would like to know
@@ -56,12 +54,12 @@ class FileInfo(object):
 
     def __str__(self):
         # doesn't (currently) annotate symlinks with @ a la "ls -F"
-        return '{}{}'.format(self.fullname, '/' if self.is_dir() else '')
+        return f"{self.fullname}{'/' if self.is_dir() else ''}"
 
     def __repr__(self):
-        return '{}({!r}, {!r}, {!r}, {!r})'.format(
-            self.__class__.__name__, self.fullname, self.mode,
-            self._contents, self._oddballs)
+        return (f"{self.__class__.__name__}({repr(self.fullname)}, "
+            f"{repr(self.mode)}, "
+            f"{repr(self._contents)}, {repr(self._oddballs)})")
 
     def strmode(self):
         "return 'file', 'directory', 'socket', etc"
@@ -111,7 +109,7 @@ class FileInfo(object):
         "read target of symlink - do not use on non-symlink"
         if not self.is_symlink():
             raise ValueError('attempt to get target of '
-                             '{} {!r}'.format(self.strmode(), self.fullname))
+                             f'{self.strmode()} {repr(self.fullname)}')
         if self._cached_readlink is None:
             self._cached_readlink = os.readlink(self.fullname)
         return self._cached_readlink
@@ -127,10 +125,10 @@ class FileInfo(object):
         "helper for contents/oddballs"
         if not self.is_dir():
             raise ValueError('attempt to get contents of '
-                             '{} {!r}'.format(self.strmode(), self.fullname))
+                             f'{self.strmode()} {repr(self.fullname)}')
         if which is None:
-            raise ValueError('attempt to get contents of '
-                             'unsaved dir {!r}'.format(self.fullname))
+            raise ValueError('attempt to get contents of unsaved dir'
+                             f'{self.strmode()} {repr(self.fullname)}')
         return which
 
     @property
@@ -149,7 +147,7 @@ class FileInfo(object):
         return self._dir_contents(self._oddballs)
 
 
-class WorkList(object):
+class WorkList:
     """
     WorkList collects up a list of operations to be done on a
     set of files (the files themselves are represented by
@@ -186,7 +184,7 @@ class WorkList(object):
     def _abspathfrom(arg):
         path = getattr(arg, 'fullname', arg)
         if not os.path.isabs(path):
-            raise ValueError('path {} is not absolute'.format(path))
+            raise ValueError(f'path {path} is not absolute')
         return path
 
     @staticmethod
@@ -214,7 +212,7 @@ class WorkList(object):
         we'll schedule a rmdir instead.
         """
         if hasattr(path, 'is_dir') and path.is_dir():
-            self.to_rmdir.append(self._pathname(path))
+            self.to_rmdir.append(self._abspathfrom(path))
         else:
             self.to_remove.append(self._abspathfrom(path))
 
@@ -250,6 +248,7 @@ class WorkList(object):
         doing a dry run) so if any OSError is raised, there is
         no simple reversal.
         """
+        # pylint: disable=too-many-branches
         if (len(self.to_rename) +
                 len(self.to_remove) +
                 len(self.to_rmdir) +
@@ -259,42 +258,43 @@ class WorkList(object):
             # nothing to do - avoid printing location when doing dry-run
             return
         if dryrun:
+            # pylint: disable=unnecessary-lambda-assignment
             if location is not None:
-                print('cd {!r}'.format(location))
+                print(f'cd {repr(location)}')
                 fmt = lambda path: strip_prefix(path, location)
             else:
                 fmt = lambda path: path
 
         for old, new in self.to_rename:
             if dryrun:
-                print('mv {!r} {!r}'.format(fmt(old), fmt(new)))
+                print(f'mv {repr(fmt(old))} {repr(fmt(new))}')
             else:
                 os.rename(old, new)
         for old in self.to_remove:
             if dryrun:
-                print('rm {!r}'.format(fmt(old)))
+                print(f'rm {repr(fmt(old))}')
             else:
                 os.unlink(old)
         for old in self.to_rmdir:
             if dryrun:
-                print('rmdir {!r}'.format(fmt(old)))
+                print(f'rmdir {repr(fmt(old))}')
             else:
                 os.rmdir(old)
         for new in self.to_mkdir:
             if dryrun:
-                print('mkdir {!r}'.format(fmt(new)))
+                print(f'mkdir {repr(fmt(new))}')
             else:
                 os.mkdir(new, 0o777)
         for old, new in self.to_copy:
             if dryrun:
-                print('cp {!r} {!r}'.format(fmt(old), fmt(new)))
+                print(f'cp {repr(fmt(old))} {repr(fmt(new))}')
             else:
                 shutil.copyfile(old, new)
         for old, new in self.to_symlink:
             # Although "ls -l" displays these as new -> old, the
             # ln -s and symlink calls take them in the old, new order.
             if dryrun:
-                print('ln -s {!r} {!r}'.format(fmt(old), fmt(new)))
+                print(f'ln -s {repr(fmt(old))} {repr(fmt(new))}')
             else:
                 os.symlink(old, new)
 
@@ -309,13 +309,13 @@ def locate_dotfiles(allow_none):
         return dotfilesdir
     if allow_none:
         return None
-    print('I found myself at {}'.format(SELF), file=sys.stderr)
-    print('I could not find a Dotfiles directory at {}'.format(dotfilesdir),
+    print(f'I found myself at {SELF}', file=sys.stderr)
+    print(f'I could not find a Dotfiles directory at {dotfilesdir}',
           file=sys.stderr)
     sys.exit(1)
 
 
-def compute_relpath(within, to):
+def compute_relpath(within, to): # pylint: disable=invalid-name
     """
     We want to link <within>/foo to <to>/foo, using a
     relative path with .. if needed and then leading
@@ -350,16 +350,16 @@ def strip_prefix(path, prefix):
     If the full name exactly matches the prefix, this
     still returns the full name, not the empty string.
     """
-    pl = len(prefix)
-    fl = len(path)
-    if fl > pl and path.startswith(prefix):
-        part = path[pl:]
+    path_len = len(prefix)
+    file_len = len(path)
+    if file_len > path_len and path.startswith(prefix):
+        part = path[path_len:]
         if part.startswith(os.path.sep):
             return part[len(os.path.sep):]
     return path
 
 
-def ftype_string(mode):
+def ftype_string(mode): # pylint: disable=too-many-return-statements
     """
     Format stat.st_mode field as file-type string
     (file, directory, symlink, etc).
@@ -377,7 +377,7 @@ def ftype_string(mode):
     if stat.S_ISSOCK(mode):
         return 'socket'
     # bsd only whiteout is not supported
-    return 'mystery-file-mode={:07o}' % mode
+    return f'mystery-file-mode={mode:07o}'
 
 
 def getmode(path, use_stat=False):
@@ -562,7 +562,7 @@ def clean_copy(worklist, srcinfo, newtop):
         worklist.copyfile(srcinfo, newtop)
 
 
-def match_dirs(worklist, srcinfo, tgtinfo):
+def match_dirs(worklist, srcinfo, tgtinfo): # pylint: disable=too-many-branches
     """
     rmdir any target dir where it does not have a corresponding
     src dir.  mkdir any target dir where src dir exists but does
@@ -659,13 +659,15 @@ def _get_rename_path(path):
     i = 0
     while True:
         i += 1
-        tpath = os.path.join(dirname, '{}.{}'.format(basename, i))
+        tpath = os.path.join(dirname, f'{basename}.{i}')
         if getmode(tpath) is None:
             return tpath
         # todo, perhaps: if i > 10; try reading dir?
 
 
 def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
+    # pylint: disable=too-many-arguments,too-many-locals
+    # pylint: disable=too-many-branches,too-many-statements
     """
     Install (or print about installing) dot-files in home directory.
     Home directory names are '.file' which become symlinks to
@@ -700,16 +702,16 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
     """
     def print_error_header():
         if errors == 0:
-            print('error: cannot install to {}:'.format(homedir),
+            print(f'error: cannot install to {homedir}:',
                   file=sys.stderr)
 
     def print_oddballs(info):
         bad = sorted(flatten_oddballs(info), key=lambda e: e.fullname)
         for i in bad[:9]:
-            print('  {!r}: {}'.format(i.strip_prefix(dfdir), i.strmode()),
+            print(f'  {repr(i.strip_prefix(dfdir))}: {i.strmode()}',
                   file=sys.stderr)
         if len(bad) > 9:
-            print('... and {} more'.format(len(bad) - 9), file=sys.stderr)
+            print(f'... and {len(bad) - 9} more', file=sys.stderr)
 
     # Get file info about dfdir.  If there are any problematic
     # files in there, complain about them and stop.
@@ -717,17 +719,17 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
     recurse = relpath is None
     info = finfo(dfdir, recurse)
     if info is None:
-        print('cannot install from {!r}: no such directory'.format(dfdir),
+        print(f'cannot install from {repr(dfdir)}: no such directory',
               file=sys.stderr)
         return 1
     if not info.is_dir():
-        print('cannot install from {} {!r}: not a '
-              'directory'.format(info.strmode(), dfdir),
+        print(f'cannot install from {info.strmode()} {repr(dfdir)}: '
+              'not a directory',
               file=sys.stderr)
         return 1
     # can always check for this recursively, even if we didn't recurse
     if info.has_oddballs(recurse=True):
-        print('cannot install from {} due to:'.format(dfdir), file=sys.stderr)
+        print(f'cannot install from {dfdir} due to:', file=sys.stderr)
         print_oddballs(info)
         return 1
 
@@ -758,15 +760,15 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
         # Refuse to install over top of weird files.
         if not allow_plus_fifo(tgtinfo.mode):
             print_error_header()
-            print('error: {} {!r}: not a regular file, symlink, or'
-                  'directory'.format(tgtinfo.strmode(),
-                                     tgtinfo.strip_prefix(homedir)),
+            print(f'error: {tgtinfo.strmode()} '
+                  f'{repr(tgtinfo.strip_prefix(homedir))}: '
+                  'not a regular file, symlink, or directory',
                   file=sys.stderr)
             errors += 1
             continue
         if tgtinfo.has_oddballs(recurse=True):
             print_error_header()
-            print('error: {} contains special files:'.format(tgtinfo),
+            print(f'error: {tgtinfo} contains special files:',
                   file=sys.stderr)
             print_oddballs(tgtinfo)
             errors += 1
@@ -780,7 +782,7 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
                 # and pretend it's gone, so we can do a clean copy
                 # into place.
                 if force:
-                    worklist.rmfile(tgtinfo)
+                    worklist.remove(tgtinfo)
                     clean_copy(worklist, srcinfo, tgtinfo.fullname)
                     continue
                 # Fall through to other tests below, to complain
@@ -794,7 +796,7 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
                 # added to the tar file, if there is one.
                 rellink = os.path.join(relpath, srcinfo.filename)
                 if tgtinfo.read_symlink() != rellink:
-                    rmfiles.append(tgtinfo)
+                    worklist.remove(tgtinfo)
                     worklist.symlink(rellink, tgtinfo)
                 continue
 
@@ -833,10 +835,10 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
 
         # Target exists, and force not set.
         if errors == 0:
-            print('error: cannot install to {}:'.format(homedir),
+            print(f'error: cannot install to {homedir}:',
                   file=sys.stderr)
-        print('  {} {!r} is in the way'.format(tgtinfo.strmode(),
-                                               tgtinfo.strip_prefix(homedir)),
+        print(f'  {tgtinfo.strmode()} {repr(tgtinfo.strip_prefix(homedir))} '
+              'is in the way',
               file=sys.stderr)
         errors += 1
 
@@ -853,19 +855,19 @@ def install(relpath, dfdir, homedir, dryrun, force, mktar, tarmode):
                         recursive=False)
 
     worklist.execute(dryrun, location=homedir)
-    postinstall = '{}/.postinstall'.format(homedir)
+    postinstall = f'{homedir}/.postinstall'
     if dryrun:
-        print('if [ -f {} ]; then {}; fi'.format(postinstall, postinstall))
+        print(f'if [ -f {postinstall} ]; then {postinstall}; fi')
     else:
         if os.path.exists(postinstall):
             status = subprocess.call(postinstall)
             if status != 0:
-                print('{}: exit code {}'.format(status))
+                print(f'{postinstall}: exit code {status}')
 
     return 0
 
 
-def main():
+def main(): # pylint: disable=too-many-branches
     """
     The usual main
     """
@@ -876,9 +878,9 @@ def main():
 
     # NB: if dfdir is None, --dotfiles is actually required
     parser.add_argument('--dotfiles', default=dfdir,
-        help='set path to dot-files directory (default {})'.format(dfdir))
+        help=f'set path to dot-files directory (default {dfdir})')
     parser.add_argument('--homedir', default=homedir,
-        help='set path for installation (default {})'.format(homedir))
+        help=f'set path for installation (default {homedir})')
     parser.add_argument('-c', '--copy', action='store_true',
         help='make copies (instead of symlinks)')
     parser.add_argument('-f', '--force', action='count',
@@ -898,7 +900,7 @@ def main():
 
     homedir = os.path.abspath(args.homedir)
     if not os.path.isdir(homedir):
-        print('error: {} is not a directory'.format(homedir), file=sys.stderr)
+        print(f'error: {homedir} is not a directory', file=sys.stderr)
         return 1
 
     if args.copy:
@@ -906,7 +908,7 @@ def main():
     else:
         relpath = compute_relpath(homedir, dfdir)
         if not relpath:
-            print('error: cannot install {} at {}'.format(dfdir, homedir),
+            print(f'error: cannot install {dfdir} at {homedir}',
                   file=sys.stderr)
             return 1
 
@@ -923,11 +925,11 @@ def main():
                 tarmode = ''
             tarmode = 'w:' + tarmode
         if getmode(tarname) is not None:
-            print('error: {} already exists'.format(tarname), file=sys.stderr)
+            print(f'error: {tarname} already exists', file=sys.stderr)
             return 1
     else:
         if args.compress:
-            print('warning: compression mode {} ignored'.format(args.compress),
+            print(f'warning: compression mode {args.compress} ignored',
                   file=sys.stderr)
         tarname = None
         tarmode = None
