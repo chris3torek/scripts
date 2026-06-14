@@ -19,12 +19,25 @@ esac
 # Try to borrow an existing ssh agent if we can find one
 ssh_activate() {
 	local d
-	for d in /tmp/ssh-*; do
-		if [ "$d" = "/tmp/ssh-*" ]; then continue; fi
-		set "$d"/agent.*
+	# Note that at most one of these patterns will match
+	# some files / directories.  The "new" ssh uses the
+	# $HOME/.ssh/agent/s.* files, the old one uses files
+	# in /tmp/ssh-* directories.  We want to skip an
+	# unexpanded literal asterisk, and also anything that
+	# doesn't quite seem right.
+	for d in $HOME/.ssh/agent/s.* /tmp/ssh-*; do
+		case "$d" in
+		"$HOME/.ssh/agent/s.*") continue;;
+		"$HOME"/.ssh/agent/*) set "$d";;
+		"/tmp/ssh-*") continue;;
+		/tmp/ssh/*) set "$d"/agent.*;;
+		*) echo "ssh_activate: skipping mysterious entity $d" 1>&2;;
+		esac
+		# At this point, we should have one positional argument
+		# that is the SSH socket.  Let's probe it.
 		if [ $# = 1 ]; then
 			# ssh-add -l exits 0 or 1 if it works,
-			# and 2 if it cannot reach the agent
+			# and 2 if it cannot reach the agent.
 			SSH_AUTH_SOCK="$1" ssh-add -l >/dev/null 2>&1
 			case $? in
 			0|1)
@@ -35,7 +48,7 @@ ssh_activate() {
 		fi
 	done
 	_stop_ssh_on_logout=yes
-	eval `ssh-agent`
+	eval `ssh-agent -s`
 }
 
 case "${SSH_AUTH_SOCK:+set}" in
