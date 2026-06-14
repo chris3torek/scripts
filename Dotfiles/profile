@@ -6,6 +6,22 @@
 export HOSTOS=$(uname -s)
 export HOSTARCH=$(uname -m)
 
+export BLOCKSIZE=K
+export EDITOR=vim
+export VISUAL=vim
+export PAGER=more # overridden below with less if appropriate
+
+# set TERM=dumb if there's nothing better, just so that $TERM is set
+: "${TERM:=dumb}"
+
+# if we have a private terminfo for this, use it;
+# if we have a private termcap, use it.  Maybe only set TERMCAP
+# if we're really going to use it (ancient systems)?
+[ -r "$HOME/.terminfo/$TERM.tinfo" ] && export TERMINFO=$HOME/.terminfo
+case "$TERM" in
+	xterm|xterm-color|xterm-256color) export TERMCAP=$HOME/.termcap
+esac
+
 [ -d $HOME/go ] && export GOPATH=$HOME/go
 
 . $HOME/.sh-common
